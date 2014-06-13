@@ -1,0 +1,21 @@
+#!
+# Program using dfu-programmer
+#
+# Requires dfu-programmer version 0.6.2 or later
+#
+# which you have to get and build for yourself, the yum version for Fedora is obsolete
+#
+
+device=at32uc3b0512
+dfu=dfu-programmer
+hexdir=../uc3/Debug
+hex=$hexdir/uc3.hex
+cropped=$hexdir/uc3_cropped.hex
+
+srec_cat $hex -intel -exclude 0x80800000 0x80800200 -o $cropped -intel
+
+$dfu --version
+
+sudo $dfu $device erase
+sudo $dfu $device flash --suppress-bootloader-mem $cropped
+sudo $dfu $device reset

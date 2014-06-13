@@ -1,0 +1,80 @@
+###############################################################################
+#
+# Router pin out
+#
+# Package:  VQ100
+#
+###############################################################################
+set_io poop 26
+
+set_io config_sw[7] 12
+set_io config_sw[6] 16
+set_io config_sw[5] 18
+set_io config_sw[4] 19
+set_io config_sw[3] 20
+set_io config_sw[2] 21
+set_io config_sw[1] 24
+set_io config_sw[0] 25
+
+set_io trig[1]     26
+set_io trig[0]     33
+
+set_io fpga_initd  27
+set_io tacho[3]    28
+set_io tacho[2]    29
+set_io tacho[1]    30
+set_io reset_in    34
+set_io tacho[0]    36
+set_io scl         37
+set_io sda         40
+#set_io CDONE      43
+#set_io CRESET     44
+set_io spi_dout    45
+set_io spi_din     46
+set_io spi_clk     48
+#set_io spi_en0    49
+
+set_io reg_sync[3] 53
+set_io reg_sync[2] 54
+set_io reg_sync[1] 56
+set_io reg_sync[0] 57
+
+set_io sout_uc     60
+set_io sin_uc      59
+set_io spi_en_bar  62
+set_io clk         63
+
+set_io reg_en[3]   65
+set_io reg_en[2]   66
+set_io reg_en[1]   68
+set_io reg_en[0]   69
+
+set_io pgood[3]    71
+set_io pgood[2]    72
+set_io pgood[1]    73
+set_io pgood[0]    74
+
+set_io sin_down    79
+set_io sout_down   78
+set_io sout_up     81
+set_io sin_up      80
+
+set_io baud_rate[2] 82
+set_io baud_rate[1] 83
+set_io baud_rate[0] 85
+
+set_io pll_bypass   86
+set_io asic_reset_n 87
+
+set_io sin[3]      93
+set_io sout[3]     91
+
+set_io sin[2]      95
+set_io sout[2]     94
+
+set_io sin[1]      97
+set_io sout[1]     96
+
+set_io sin[0]     100
+set_io sout[0]     99
+

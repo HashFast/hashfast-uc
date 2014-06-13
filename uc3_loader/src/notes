@@ -1,0 +1,22 @@
+Miscellaneous notes:
+
+
+2013-12-29
+
+In the Sierra chassis, one of the modules does not have standby power.  When
+a module reboots to switch modes, main power controlled by that module is
+temporarily turned off. That could cause modules to do a power on reset,
+losing the state information that would have told them to stay in loader
+mode.  Tests so far have shown that they power is not in fact dropping fast
+enough for this to occur but we don't want to rely on that.  This version
+of the loader adds the capability of rebooting only the slaves into loader
+mode, as well as rebooting individual modules into loader mode.  This
+provides all the tools necessary for a host tool to manage to get everything
+setup for an update no matter what state they start in and whatever the
+power wiring is (assuming it's a configuration that can be used at all).
+Updates can be done today with the existing hfupdate operated by someone who
+understands these states.  A smart host tool to do this automatically is left
+as as exercise to the reader at this time since it is not necessary before
+the first field updates are sent out.
+
+

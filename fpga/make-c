@@ -1,0 +1,44 @@
+#!/bin/env python
+
+import sys, time
+
+version=None
+
+header='''
+//
+// FPGA code generator makes this file
+//
+// ------------------------------------------------------------
+// Generated %s
+// ------------------------------------------------------------
+//
+
+const static uint8_t fpga_program_version = %d;
+
+const static uint8_t const fpga_program[] = {
+%s
+};
+'''
+
+def make_code(version, filename):
+    f = open(filename, "r")
+    d = f.read()
+    f.close()
+    content = ",\n".join([hex(ord(x)) for x in d])
+    now = time.ctime()
+    print header % (now, version, content)
+
+
+f=None
+if len(sys.argv) == 3:
+    vs=sys.argv[1].split('=')[1]
+    version=int(vs)
+    if version <= 0 or version > 255:
+        print >>sys.stderr, "invalid version number '%s'" % vs
+        exit(1)
+    f=sys.argv[2]
+else:
+    print >>sys.stderr, "usage: %s version=X <filename>" % sys.argv[0]
+    exit(1)
+
+make_code(version, f)

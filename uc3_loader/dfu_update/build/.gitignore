@@ -1,0 +1,6 @@
+*.[do]
+*.elf
+*.hex
+*.hfu
+*.map
+update_data.[ch]

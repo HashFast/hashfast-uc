@@ -1,0 +1,42 @@
+The Makefile in this directory works under linux.  There is also some
+support for building under cygwin, although in that case dependencies are
+broken - see the note in the Makefile before the "-include $(DEPS)" line
+for explanation.  In addition to that limitation, the Atmel supplied binaries
+for the toolchain cannot deal with cygwin style symlinks.  An ugly workaround
+for that is to copy the uc tree in such as way as to eliminate the links and
+compile from there.  Under linux those problems do not exist.  The
+prerequisites, for linux, are:
+
+1. The avr32-gnu toolchain.  This is assumed to be located in
+~/avrtools/avr32-gnu-toolchain-linux_x86_64/.  The location can be overridden
+with the variable AVR32_TOOLCHAIN_DIR.  This toolchain is available for
+download at http://www.atmel.com/tools/atmelavrtoolchainforlinux.aspx.
+There is also a copy of the archive for linux_x86_64 in the google drive
+for allan@hashfast.com under "Atmel Tools".
+
+2. The avr headers.  These are assumed to be located in
+~/avrtools/atmel-headers-6.1.3.1475.  The location can be overridden with
+the variable AVR32_HEADERS_DIR.  The headers are available for download
+at http://www.atmel.com/tools/atmelavrtoolchainforlinux.aspx.  There is
+also a copy of the archive in the google drive for allan@hashfast.com
+under "Atmel Tools".
+
+3. srec_cat.  This is part of the "srecord" tools which should be available
+as a package for whichever system you're using.  It is assumed to be in your
+path.
+
+4. dfu-programmer.  This should also be available as a package.  It is
+assumed to be in your path.  This is only needed if the "program" target
+is used.
+
+5. createupdate and hfupdate.  These are from the hashfast tools
+repository and are assumed to be in ../../../../tools/utils.  The
+location can be overridden with the variable HF_TOOLS_DIR.  These are
+only needed if the "programhf" target is used.
+
+
+The makefile has four main targets.  The default, "all", builds all; the
+final output is uc3.cropped.hex.  "program" programs the image into flash
+using dfu.  "programhf" programs the image into flash using hfupdate.
+"clean" removes all of the generated files.
+
