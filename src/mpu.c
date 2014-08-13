@@ -58,7 +58,7 @@ static struct {
  */
 void mpuSetup(int protectHeap) {
 
-#if !defined(__AVR32_UC3B0512__)
+#if !(defined(__AVR32_UC3B0512__) || defined(__AVR32_UC3B0256__) || defined(__AVR32_UC3B0128__))
 #error /* at the very least the sizes of the below ranges need to be fixed */
 #endif /* !defined(__AVR32_UC3B0512__) */
 

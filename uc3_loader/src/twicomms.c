@@ -31,6 +31,7 @@
 #define SLAVE_FLAG_VERSION_SET             0x08
 #define SLAVE_FLAG_CRC_VALID               0x10
 #define SLAVE_FLAG_SERIAL_NUMBER_SET       0x20
+#define SLAVE_FLAG_SIZE_SET                0x40
 
 #ifndef MAX
 #define MAX(x,y)   ((x) > (y) ? (x) : (y))
@@ -53,12 +54,14 @@ static struct {
           addressingCompleteWaitTCS,
           idleMasterTCS, idleSlaveTCS,
           rebootSlavesWaitTCS, rebootSendWaitTCS, remoteCommandWaitTCS,
-          remoteSerialNumberWaitTCS, remoteVersionWaitTCS,
+          remoteSerialNumberWaitTCS, remoteVersionWaitTCS, remoteSizeWaitTCS,
           remoteStatusWaitTCS} state;
     volatile int addressSet;
     uint8_t slaveFlags[CONFIG_MAX_SLAVES];
     uint32_t slaveVersions[CONFIG_MAX_SLAVES];
     uint32_t slaveCRCs[CONFIG_MAX_SLAVES];
+    uint32_t slaveSizes[CONFIG_MAX_SLAVES];
+    uint32_t slaveCmdSizes[CONFIG_MAX_SLAVES];
     uint8_t slaveSerialNumbers[CONFIG_MAX_SLAVES][CONFIG_SERIAL_NUMBER_SIZE];
     uint8_t rxBuffer[TWICOMMS_MAX_DATA_PAYLOAD + 4];
     uint8_t txBuffer[TWICOMMS_MAX_DATA_PAYLOAD + 4];
@@ -86,6 +89,7 @@ static void twiCallback(unsigned int length) {
     static uint8_t txBuffer[MAX(32, CONFIG_SERIAL_NUMBER_SIZE)];
     hfLoaderAppSuffixT *suffix;
     unsigned int responseLength;
+    uint32_t size;
 
     responseLength = 0;
     if (length) {
@@ -151,6 +155,21 @@ static void twiCallback(unsigned int length) {
                 responseLength = 5;
             }
             break;
+        case TWICOMMS_CMD_SIZE:
+            /* high bit indicates loader mode */
+            size = AVR32_FLASH_SIZE;
+            txBuffer[0] = size >> 24;
+            txBuffer[1] = (size >> 16) & 0xff;
+            txBuffer[2] = (size >> 8) & 0xff;
+            txBuffer[3] = size & 0xff;
+            size = 0;
+            size = flashSize();
+            txBuffer[4] = size >> 24;
+            txBuffer[5] = (size >> 16) & 0xff;
+            txBuffer[6] = (size >> 8) & 0xff;
+            txBuffer[7] = size & 0xff;
+            responseLength = 8;
+            break;
         case TWICMD_SERIAL_NUMBER:
             memcpy(txBuffer, (void *) CONFIG_SERIAL_NUMBER_ADDRESS,
                    CONFIG_SERIAL_NUMBER_SIZE);
@@ -185,6 +204,9 @@ static void twiCallback(unsigned int length) {
                 txBuffer[0] = twicomms.flashStatus;
             responseLength = 1;
             break;
+        //default:
+        //    txBuffer[0] = 0;
+        //    responseLength = 1;
         }
     }
     twiSlaveSetTx(txBuffer, responseLength);
@@ -240,6 +262,16 @@ void twicommsSlaveSerialNumber(int slave, uint8_t *sn) {
 
     memcpy(sn, &twicomms.slaveSerialNumbers[slave][0],
            CONFIG_SERIAL_NUMBER_SIZE);
+}
+
+uint32_t twicommsSlaveSize(int slave) {
+
+    return twicomms.slaveSizes[slave];
+}
+
+uint32_t twicommsSlaveCmdSize(int slave) {
+
+    return twicomms.slaveCmdSizes[slave];
 }
 
 void twicommsRebootRequest(int loader, int slave) {
@@ -461,6 +493,19 @@ void twicommsTask(void) {
                                            twicomms.rxBuffer, 9) ==
                         TWI_SUCCESS)
                         twicomms.state = remoteVersionWaitTCS;
+                } else if (!(twicomms.slaveFlags[twicomms.poll] & SLAVE_FLAG_SIZE_SET)) {
+                    if((twicomms.slaveVersions[twicomms.poll] & 0x0000FFFF) >= 0x00000004) {
+                        twicomms.txBuffer[0] = TWICOMMS_CMD_SIZE;
+                        if (twiMasterWriteRead(TWICOMMS_SLAVE_STARTADDR +
+                                               twicomms.poll,
+                                               twicomms.txBuffer, 1,
+                                               twicomms.rxBuffer, 8) ==
+                            TWI_SUCCESS)
+                            twicomms.state = remoteSizeWaitTCS;
+                    } else {
+                        twicomms.slaveFlags[twicomms.poll] |= SLAVE_FLAG_SIZE_SET;
+                        twicomms.state = idleMasterTCS;
+                    }
                 } else if (twicomms.slaveFlags[twicomms.poll] &
                            SLAVE_FLAG_BEGIN) {
                     twicomms.txBuffer[0] = TWICOMMS_CMD_LOADER_START;
@@ -576,6 +621,26 @@ void twicommsTask(void) {
                     }
                     twicomms.slaveFlags[twicomms.poll] |=
                         SLAVE_FLAG_VERSION_SET;
+                }
+                twicomms.state = idleMasterTCS;
+            }
+            break;
+        case remoteSizeWaitTCS:
+            status = twiStatus();
+            if (status != TWI_BUSY) {
+                if (status == TWI_SUCCESS) {
+                    twicomms.slaveSizes[twicomms.poll] =
+                        ((uint32_t) twicomms.rxBuffer[0] << 24) |
+                        ((uint32_t) twicomms.rxBuffer[1] << 16) |
+                        ((uint32_t) twicomms.rxBuffer[2] << 8) |
+                        twicomms.rxBuffer[3];
+                    twicomms.slaveCmdSizes[twicomms.poll] =
+                        ((uint32_t) twicomms.rxBuffer[4] << 24) |
+                        ((uint32_t) twicomms.rxBuffer[5] << 16) |
+                        ((uint32_t) twicomms.rxBuffer[6] << 8) |
+                        twicomms.rxBuffer[7];
+                    twicomms.slaveFlags[twicomms.poll] |=
+                        SLAVE_FLAG_SIZE_SET;
                 }
                 twicomms.state = idleMasterTCS;
             }

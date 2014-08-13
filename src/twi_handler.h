@@ -53,6 +53,7 @@
 #define TWICMD_MIXED_BAUD          15
 #define TWICMD_STARTUP             16
 #define TWICMD_VOLTAGE_SET         17
+#define TWICMD_SIZE                18
 
 #define TWI_MASTER_ADDRESS          8
 #define TWI_BROADCAST               0

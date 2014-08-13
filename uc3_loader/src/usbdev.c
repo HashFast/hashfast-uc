@@ -208,6 +208,7 @@ int usbdevSetup(void) {
     int result;
     hfLoaderAppSuffixT *suffix;
     uint32_t version;
+    uint32_t size;
     int valid;
     int status;
 
@@ -246,8 +247,8 @@ int usbdevSetup(void) {
                               sizeof(hfLoaderAppSuffixT));
                     if (suffix->magic == HF_LOADER_SUFFIX_MAGIC) {
                         valid = 1;
-                        version = suffix->crc;
                     }
+                    version = suffix->crc;
                 } else
                     valid = twicommsSlaveCRC(
                                 (int) udd_g_ctrlreq.req.wIndex - 1,
@@ -277,6 +278,34 @@ int usbdevSetup(void) {
                         usbdev.setupPayload);
                 udd_g_ctrlreq.payload = usbdev.setupPayload;
                 udd_g_ctrlreq.payload_size = CONFIG_SERIAL_NUMBER_SIZE;
+                if (udd_g_ctrlreq.payload_size > udd_g_ctrlreq.req.wLength)
+                    udd_g_ctrlreq.payload_size = udd_g_ctrlreq.req.wLength;
+                result = 1;
+            }
+            break;
+        case HF_LOADER_USB_FLASH_SIZE:
+            if ((udd_g_ctrlreq.req.bmRequestType & USB_REQ_DIR_MASK) ==
+                USB_REQ_DIR_IN) {
+                if (udd_g_ctrlreq.req.wIndex == 0)
+                    size = AVR32_FLASH_SIZE;
+                else
+                    size = twicommsSlaveSize((int) udd_g_ctrlreq.req.wIndex - 1);
+                usbdev.setupPayload[0] = size & 0xff;
+                usbdev.setupPayload[1] = (size >> 8) & 0xff;
+                usbdev.setupPayload[2] = (size >> 16) & 0xff;
+                usbdev.setupPayload[3] = size >> 24;
+                udd_g_ctrlreq.payload_size = 4;
+                size = 0;
+                if (udd_g_ctrlreq.req.wIndex == 0)
+                    size = flashSize();
+                else
+                    size = twicommsSlaveCmdSize((int) udd_g_ctrlreq.req.wIndex - 1);
+                usbdev.setupPayload[4] = size & 0xff;
+                usbdev.setupPayload[5] = (size >> 8) & 0xff;
+                usbdev.setupPayload[6] = (size >> 16) & 0xff;
+                usbdev.setupPayload[7] = size >> 24;
+                udd_g_ctrlreq.payload_size = 8;
+                udd_g_ctrlreq.payload = usbdev.setupPayload;
                 if (udd_g_ctrlreq.payload_size > udd_g_ctrlreq.req.wLength)
                     udd_g_ctrlreq.payload_size = udd_g_ctrlreq.req.wLength;
                 result = 1;

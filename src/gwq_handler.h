@@ -74,13 +74,22 @@
 #define DEFAULT_NTIME_ROLL              1
 #define DEFAULT_NTIME_ROLL_PER_CORE     1
 #define MAX_GROUP_SEQUENCE_SPACE        256
+
+/* 
+ * RAM reduction for smaller chips.
+ */
+#if defined(__AVR32_UC3B0512__)
+#define MAX_DIE                         20
 #define MAX_SEQUENCE_SPACE              8192
+#elif defined(__AVR32_UC3B0256__) || defined(__AVR32_UC3B0128__)
+#define MAX_DIE                         8
+#define MAX_SEQUENCE_SPACE              2048
+#endif
 
 /*
  * How many multicast groups, maximum, there will be.
  * Must be a multiple of 16.
  */
-#define MAX_DIE                         20
 #define MAX_GROUPS                      96
 #define MAX_CORES                       (MAX_GROUPS*MAX_DIE) //!< Sierra
 /* work restart phases */

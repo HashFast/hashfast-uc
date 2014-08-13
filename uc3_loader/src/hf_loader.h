@@ -22,6 +22,7 @@ extern "C" {
 #define HF_LOADER_USB_FINISH           0x65
 #define HF_LOADER_USB_RESTART_ADDR     0x66
 #define HF_LOADER_USB_SERIAL           0x67
+#define HF_LOADER_USB_FLASH_SIZE       0x68
 #define HF_LOADER_USB_DEBUG            0xd0
 
 

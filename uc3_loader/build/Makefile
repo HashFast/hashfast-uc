@@ -2,11 +2,21 @@
 
 DEBUG = 1
 
-OUTPUT = uc3_loader
+OUTPUT = uc3_loader.$(FLASH_SIZE)k
 
-all:	$(OUTPUT).elf $(OUTPUT).hex
+ifeq ($(FLASH_SIZE),)
 
-CHIP = uc3b0512
+all:
+	make FLASH_SIZE=512
+	make FLASH_SIZE=256
+	make FLASH_SIZE=128 
+else
+
+all:    $(OUTPUT).elf $(OUTPUT).hex
+
+endif
+
+CHIP = uc3b0$(FLASH_SIZE)
 JTAG_CHIP = at32$(CHIP)
 JTAG_POD = jtagice3
 
@@ -110,17 +120,21 @@ S_SOURCES = \
 	ASF/exception.S \
 	ASF/startup_uc3.S
 
-C_OBJS = $(C_SOURCES:%.c=%.o)
+C_OBJS  = $(C_SOURCES:%.c=%.o)
+_C_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(C_OBJS))
 
-C_DEPS = $(C_SOURCES:%.c=%.d)
+C_DEPS  = $(C_SOURCES:%.c=%.d)
+_C_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(C_DEPS))
 
-S_OBJS = $(S_SOURCES:%.S=%.o)
+S_OBJS  = $(S_SOURCES:%.S=%.o)
+_S_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(S_OBJS))
 
-S_DEPS = $(S_SOURCES:%.S=%.d)
+S_DEPS  = $(S_SOURCES:%.S=%.d)
+_S_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(S_DEPS))
 
-OBJS = $(C_OBJS) $(S_OBJS)
+OBJS    = $(_C_OBJS) $(_S_OBJS)
 
-DEPS = $(C_DEPS) $(S_DEPS)
+DEPS    = $(_C_DEPS) $(_S_DEPS)
 
 %.hex:	%.elf
 	$(OBJCOPY) -O ihex -R .eeprom -R .fuse -R .lock -R .signature $< $@
@@ -130,12 +144,12 @@ DEPS = $(C_DEPS) $(S_DEPS)
 	$(SIZE) $@
 
 
-$(C_OBJS):	%.o: $(S)/%.c
+$(_C_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.c
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CCOPTS) -o $@ $<
 
 
-$(S_OBJS):	%.o: $(S)/%.S
+$(_S_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.S
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(ASOPTS) -o $@ $<
 
@@ -157,6 +171,18 @@ ifneq "$(OS)" "Windows_NT"
 -include $(DEPS)
 endif
 
+ifeq ($(FLASH_SIZE),)
+
+program:
+	# MUST SPECIFY FLASH_SIZE #
+
+clean:
+	make FLASH_SIZE=512 clean
+	make FLASH_SIZE=256 clean
+	make FLASH_SIZE=128 clean
+	-$(RM) -r obj
+
+else
 
 program:	$(OUTPUT).hex
 	$(ATPROGRAM) -t $(JTAG_POD) -i jtag -d $(JTAG_CHIP) chiperase
@@ -166,6 +192,7 @@ program:	$(OUTPUT).hex
 
 clean:
 	-$(RM) $(OBJS) $(DEPS)
-	-$(RM) $(OUTPUT).elf $(OUTPUT).map $(OUTPUT).hex 
-	-$(RM) -r ASF ASF_modified
+	-$(RM) $(OUTPUT).elf $(OUTPUT).map $(OUTPUT).hex
+	-$(RM) -r obj/$(FLASH_SIZE)k/ASF obj/$(FLASH_SIZE)k/ASF_modified
 
+endif

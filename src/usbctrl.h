@@ -41,7 +41,15 @@ extern uint8_t usbctrlDebugBuffer[64];
 
 int usbctrlDebugStreamWriteStr(const char *);
 
+#ifdef NO_PRINTF
+
+#define usbctrlDebugStreamPrintf(...)
+
+#else /* NO_PRINTF */
+
 int usbctrlDebugStreamPrintf(const char *, ...);
+
+#endif /* NO_PRINTF */
 
 int usbctrlDebugMonitorRead(void);
 

@@ -1254,7 +1254,11 @@ static void chain_config() {
         }
         /* figure sequence modulus, minimum 256 */
         for (i = 8; i < 16; i++) {
-            info->num_sequence = (uint16_t) 1 << i;
+            info->num_sequence = (uint16_t)1 << i;
+            if (info->num_sequence > MAX_SEQUENCE_SPACE) {
+                info->num_sequence = MAX_SEQUENCE_SPACE;
+                break;
+            }
             if (info->num_sequence > (2 * le16_to_cpu(hb->inflight_target)))
                 break;
         }

@@ -4,7 +4,7 @@
 #define _version_h
 
 
-#define VERSION        0x0003
+#define VERSION        0x0004
 
 
 #endif /* _version_h */

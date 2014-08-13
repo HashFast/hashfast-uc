@@ -22,7 +22,10 @@
 #define CONFIG_PWM_CHANNEL_PWM1                        4
 #define CONFIG_PWM_CHANNEL_PWM2                        0
 
-
+/* TODO
+ * These defines are incorrect because they are based on the board design and
+ * are independant from which chip is used. Should change later.
+ */
 #if defined(__AVR32_UC3B0512__)
 #define CONFIG_BOARD_OSC0_HZ                     8000000
 #define CONFIG_BOARD_OSC0_IS_XTAL                      0
@@ -31,6 +34,10 @@
 #define CONFIG_BOARD_OSC0_HZ                    12000000
 #define CONFIG_BOARD_OSC0_IS_XTAL                      1
 #define CONFIG_BOARD_OSC0_STARTUP_US               17000
+#elif defined(__AVR32_UC3B0128__)
+#define CONFIG_BOARD_OSC0_HZ                     8000000
+#define CONFIG_BOARD_OSC0_IS_XTAL                      0
+#define CONFIG_BOARD_OSC0_STARTUP_US                 100
 #else
 #error
 #endif

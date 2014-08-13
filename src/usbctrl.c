@@ -204,6 +204,8 @@ int usbctrlDebugStreamWriteStr(const char *s) {
     return written;
 }
 
+#ifndef usbctrlDebugStreamPrintf
+
 /**
  * Write a formatted string to the debug stream.
  * Queues the complete message or nothing.
@@ -228,6 +230,8 @@ int usbctrlDebugStreamPrintf(const char *format, ...) {
 
     return length;
 }
+
+#endif /* usbctrlDebugStreamPrintf */
 
 /**
  * Called by ISR

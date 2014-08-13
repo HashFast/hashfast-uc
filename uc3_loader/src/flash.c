@@ -140,6 +140,10 @@ static uint32_t __attribute__((section(".ramfunc"))) doFlashCmds(
     return status;
 }
 
+uint32_t flashSize(void) {
+  return doFlashCmd(AVR32_FLASHC_CMD_SIZE);
+}
+
 static int doEraseWrite(int sector, uint32_t *buffer) {
     uint32_t *flashPtr;
     uint32_t stat;

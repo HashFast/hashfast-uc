@@ -63,6 +63,8 @@ void uprintf(uint16_t dmask, char *format, ...) {
 
 #endif /* uprintf */
 
+#ifndef notify_host
+
 /**
  * Send a notification to the host via OP_USB_NOTIFY
  * NEVER call notify_host() except under diagnostic or exception circumstances,
@@ -102,3 +104,5 @@ void notify_host(char *format, ...) {
         udi_cdc_write_buf(&notify, sizeof(struct hf_header) + 4 + n);
     }
 }
+
+#endif /* notify_host */

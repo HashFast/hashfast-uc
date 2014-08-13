@@ -49,6 +49,7 @@ void spi_master_setup_pins(void);
 void spi_master_setup(void);
 void spi_handler(void);
 void dac_write(bool, uint16_t);
+status_code_t fpga_spi_write_packet(volatile avr32_spi_t *spi, const uint8_t *data, size_t len);
 bool fpga_programmer(void);
 status_code_t hf_spi_write_read(uint8_t, uint8_t *, int, uint8_t *, int);
 status_code_t hf_spi_read_block(uint8_t, uint8_t, uint8_t *, size_t);

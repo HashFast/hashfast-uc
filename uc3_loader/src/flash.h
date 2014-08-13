@@ -14,7 +14,7 @@ void flashReset(void);
 
 int flashSubmitFWBuffer(unsigned char *buffer, int length);
 
-
+uint32_t flashSize(void);
 
 #ifdef __cplusplus
 }

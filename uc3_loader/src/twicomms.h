@@ -29,7 +29,7 @@ extern "C" {
 #define TWICOMMS_CMD_ADDRESSING_COMPLETE   TWICMD_ADDRESSING_COMPLETE
 #define TWICOMMS_CMD_VERSION               TWICMD_VERSION
 #define TWICOMMS_CMD_REBOOT                TWICMD_REBOOT
-
+#define TWICOMMS_CMD_SIZE                  TWICMD_SIZE
 
 #define TWICOMMS_CMD_LOADER_START            102
 #define TWICOMMS_CMD_LOADER_DATA             103
@@ -48,6 +48,10 @@ uint32_t twicommsSlaveVersion(int slave);
 int twicommsSlaveCRC(int slave, uint32_t *crc);
 
 void twicommsSlaveSerialNumber(int slave, uint8_t *sn);
+
+uint32_t twicommsSlaveSize(int slave);
+
+uint32_t twicommsSlaveCmdSize(int slave);
 
 int twicommsNumSlaves(uint8_t *slaves);
 

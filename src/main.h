@@ -34,7 +34,7 @@
 #define _MAIN_H_
 
 /* 0 is development firmware */
-#define FIRMWARE_VERSION        0x0007          //!< v0.7.0
+#define FIRMWARE_VERSION        0x0008  //!< v0.8.0
 
 extern const char *iface_ver;
 extern const char *firmware_ver;
@@ -141,6 +141,12 @@ void convert_to_hex(unsigned char *data, char *s, int len);
  */
 #define FEATURE_DEBUG_CLI
 
+/* TODO
+ * This will compile out all functions that use vsnprintf. This makes the
+ * binary significantly smaller.
+ */
+#define NO_PRINTF
+
 /*
  * Collect code timing info; turn off for release builds since it would be
  * adding some overhead with no benefit.
@@ -214,7 +220,6 @@ void CheckUartIncoming(void);
 void CheckUartOutgoing(void);
 void DisplayStatus(void);
 uint16_t pll_calc(struct hf_pll_config *, uint32_t, uint32_t);
-void notify_host(char *format, ...);
 
 #define DIMENSION(x) (sizeof(x)/sizeof(x[0]))
 
@@ -236,13 +241,24 @@ uint8_t op_ping(struct hf_header *h);
 
 extern __attribute__((__section__(".spurious1")))  uint32_t spurious1;
 
+#ifdef NO_PRINTF
+
+#define notify_host(...)
+#define uprintf(...)
+
+#else /* NO_PRINTF */
+
+void notify_host(char *format, ...);
+
 /* TODO
  * Crude debugging.
  * Comment out the function prototype and uncomment the #define to compile out
- * all uprintf's.
+ * all uprintf's. Also make sure NO_PRINTF is not defined.
  */
 #define uprintf(...)
 //void uprintf(uint16_t, char *, ...);
+
+#endif /* NO_PRINTF */
 
 #define UD_WORK_RESTART     0x1
 #define UD_SEQUENCE         0x2

@@ -3,12 +3,11 @@
 DEBUG = 0
 
 #sudo apt-get install srecord
-OUTPUT = uc3
+OUTPUT = uc3.$(FLASH_SIZE)k
 
 # which module in chain to program with programhf target
 HF_TARGET_MODULE = 0
 
-FLASH_SIZE = 512
 CHIP = uc3b0$(FLASH_SIZE)
 DFU_CHIP = at32$(CHIP)
 LDSCRIPT = $(S)/ASF/avr32/utils/linker_scripts/at32uc3b/0$(FLASH_SIZE)/gcc/link_$(CHIP).lds
@@ -39,11 +38,19 @@ DFU = dfu-programmer
 SREC_CAT = srec_cat
 MKDIR_P = mkdir -p
 
+ifeq ($(FLASH_SIZE),)
 
-all:	$(OUTPUT).elf $(OUTPUT).hex $(OUTPUT).cropped.hex
+all:
+	make FLASH_SIZE=512
+	make FLASH_SIZE=256
+	make FLASH_SIZE=128 
+else
 
+all:    $(OUTPUT).elf $(OUTPUT).hex $(OUTPUT).cropped.hex
 ifneq  ($(wildcard $(CREATEUPDATE)),)
 all:    $(OUTPUT).cropped.hfu
+endif
+
 endif
 
 S = ../src
@@ -189,17 +196,21 @@ S_SOURCES = \
 	ASF/avr32/drivers/intc/exception.S \
 	ASF/avr32/utils/startup/startup_uc3.S
 
-C_OBJS = $(C_SOURCES:%.c=%.o)
+C_OBJS  = $(C_SOURCES:%.c=%.o)
+_C_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(C_OBJS))
 
-C_DEPS = $(C_SOURCES:%.c=%.d)
+C_DEPS  = $(C_SOURCES:%.c=%.d)
+_C_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(C_DEPS))
 
-S_OBJS = $(S_SOURCES:%.S=%.o)
+S_OBJS  = $(S_SOURCES:%.S=%.o)
+_S_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(S_OBJS))
 
-S_DEPS = $(S_SOURCES:%.S=%.d)
+S_DEPS  = $(S_SOURCES:%.S=%.d)
+_S_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(S_DEPS))
 
-OBJS = $(C_OBJS) $(S_OBJS)
+OBJS    = $(_C_OBJS) $(_S_OBJS)
 
-DEPS = $(C_DEPS) $(S_DEPS)
+DEPS    = $(_C_DEPS) $(_S_DEPS)
 
 %.hfu:	%.bin
 	$(CREATEUPDATE) -f$(FLASH_SIZE) $< $@
@@ -221,12 +232,12 @@ DEPS = $(C_DEPS) $(S_DEPS)
 	$(SIZE) $@
 
 
-$(C_OBJS):	%.o: $(S)/%.c
+$(_C_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.c
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CCOPTS) -o $@ $<
 
 
-$(S_OBJS):	%.o: $(S)/%.S
+$(_S_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.S
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(ASOPTS) -o $@ $<
 
@@ -250,6 +261,31 @@ endif
 # alias
 program:	programhf
 
+enterloader:
+  # Ignore error if already in HFU mode
+	-$(ENTERLOADER)
+	sleep 3
+	$(HFUPDATE) -E
+
+ifeq ($(FLASH_SIZE),)
+
+programdfu:
+	# MUST SPECIFY FLASH_SIZE #
+
+programhf:
+	# MUST SPECIFY FLASH_SIZE #
+
+programsierra:
+	# MUST SPECIFY FLASH_SIZE #
+
+clean:
+	make FLASH_SIZE=512 clean
+	make FLASH_SIZE=256 clean
+	make FLASH_SIZE=128 clean
+	-$(RM) -r obj
+	
+else
+
 programdfu:	$(OUTPUT).cropped.hex
 	$(DFU) $(DFU_CHIP) erase
 	$(DFU) $(DFU_CHIP) flash --suppress-bootloader-mem $<
@@ -265,15 +301,10 @@ programsierra:	$(OUTPUT).cropped.hfu
 	$(HFUPDATE) -m2 $<
 	$(HFUPDATE) -r
 
-enterloader:
-        # Ignore error if already in HFU mode
-	-$(ENTERLOADER)
-	sleep 3
-	$(HFUPDATE) -E
-
 clean:
 	-$(RM) $(OBJS) $(DEPS)
 	-$(RM) $(OUTPUT).elf $(OUTPUT).map $(OUTPUT).hex $(OUTPUT).cropped.hex
 	-$(RM) $(OUTPUT).cropped.bin $(OUTPUT).cropped.hfu
-	-$(RM) -r ASF
+	-$(RM) -r obj/$(FLASH_SIZE)k/ASF
 
+endif

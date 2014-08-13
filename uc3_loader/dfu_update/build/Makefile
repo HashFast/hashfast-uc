@@ -1,11 +1,10 @@
 .PHONY:	all program programdfu programhf clean
 
-OUTPUT = uc3_loader_dfu_update
+OUTPUT = uc3_loader_dfu_update.$(FLASH_SIZE)k
 
 # which module in chain to program with programhf target
 HF_TARGET_MODULE = 0
 
-FLASH_SIZE = 512
 CHIP = uc3b0$(FLASH_SIZE)
 DFU_CHIP = at32$(CHIP)
 
@@ -28,17 +27,25 @@ LD = $(AVR32_TOOLCHAIN_BIN_DIR)/avr32-ld
 OBJCOPY = $(AVR32_TOOLCHAIN_BIN_DIR)/avr32-objcopy
 OBJDUMP = $(AVR32_TOOLCHAIN_BIN_DIR)/avr32-objdump
 SIZE = $(AVR32_TOOLCHAIN_BIN_DIR)/avr32-size
-CREATEUPDATE = $(HF_TOOLS_DIR)/utils/createupdate
-HFUPDATE = $(HF_TOOLS_DIR)/utils/hfupdate
+CREATEUPDATE = $(HF_TOOLS_DIR)/createupdate
+HFUPDATE = $(HF_TOOLS_DIR)/hfupdate
 SREC_CAT = srec_cat
 DFU = dfu-programmer
 MKDIR_P = mkdir -p
 
+ifeq ($(FLASH_SIZE),)
 
-all:	$(OUTPUT).elf $(OUTPUT).hex
+all:
+	make FLASH_SIZE=512
+	make FLASH_SIZE=256
+	make FLASH_SIZE=128 
+else
 
+all:    $(OUTPUT).elf $(OUTPUT).hex
 ifneq  ($(wildcard $(CREATEUPDATE)),)
-all:	$(OUTPUT).hfu
+all:	  $(OUTPUT).hfu
+endif
+
 endif
 
 S = ../src
@@ -47,7 +54,7 @@ LDSCRIPT = $(S)/ASF_modified/link_$(CHIP).lds
 
 INCLUDE_DIRS = \
 	$(S) \
-	. \
+	./src/$(FLASH_SIZE)k \
 	$(S)/ASF_modified \
 	$(S)/ASF \
 	$(AVR32_HEADERS_DIR)
@@ -84,7 +91,7 @@ C_SOURCES = \
 	flash.c \
 	utils.c \
 	interrupts.c \
-	../build/update_data.c \
+	../build/src/$(FLASH_SIZE)k/update_data.c \
 	main.c
 
 S_SOURCES = \
@@ -92,22 +99,27 @@ S_SOURCES = \
 	ASF/exception.S \
 	ASF/startup_uc3.S
 
-C_OBJS = $(C_SOURCES:%.c=%.o)
+C_OBJS  = $(C_SOURCES:%.c=%.o)
+_C_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(C_OBJS))
 
-C_DEPS = $(C_SOURCES:%.c=%.d)
+C_DEPS  = $(C_SOURCES:%.c=%.d)
+_C_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(C_DEPS))
 
-S_OBJS = $(S_SOURCES:%.S=%.o)
+S_OBJS  = $(S_SOURCES:%.S=%.o)
+_S_OBJS = $(patsubst %.o,obj/$(FLASH_SIZE)k/%.o,$(S_OBJS))
 
-S_DEPS = $(S_SOURCES:%.S=%.d)
+S_DEPS  = $(S_SOURCES:%.S=%.d)
+_S_DEPS = $(patsubst %.d,obj/$(FLASH_SIZE)k/%.d,$(S_DEPS))
 
-OBJS = $(C_OBJS) $(S_OBJS)
+OBJS    = $(_C_OBJS) $(_S_OBJS)
 
-DEPS = $(C_DEPS) $(S_DEPS)
+DEPS    = $(_C_DEPS) $(_S_DEPS)
 
-../../build/uc3_loader.hex:
+../../build/uc3_loader.$(FLASH_SIZE)k.hex:
 	make -C ../../build
 
-$(S)/../build/update_data.c:	../../build/uc3_loader.hex
+$(S)/../build/src/$(FLASH_SIZE)k/update_data.c:	../../build/uc3_loader.$(FLASH_SIZE)k.hex
+	$(MKDIR_P) $(S)/../build/src/$(FLASH_SIZE)k/
 	$(SREC_CAT) $< -intel -o $@ -c-array update_data -include
 
 %.hfu:	%.bin
@@ -133,12 +145,12 @@ $(S)/../build/update_data.c:	../../build/uc3_loader.hex
 	$(SIZE) $@
 
 
-$(C_OBJS):	%.o: $(S)/%.c
+$(_C_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.c
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(CCOPTS) -o $@ $<
 
 
-$(S_OBJS):	%.o: $(S)/%.S
+$(_S_OBJS):	obj/$(FLASH_SIZE)k/%.o: $(S)/%.S
 	$(MKDIR_P) $(dir $@)
 	$(CC) $(ASOPTS) -o $@ $<
 
@@ -160,12 +172,29 @@ ifneq "$(OS)" "Windows_NT"
 -include $(DEPS)
 endif
 
-
 # alias
 program:	programdfu
 
+ifeq ($(FLASH_SIZE),)
+
+programdfu:
+	-make FLASH_SIZE=512 programdfu
+	-make FLASH_SIZE=256 programdfu
+	-make FLASH_SIZE=128 programdfu
+
+programhf:
+	# MUST SPECIFY FLASH_SIZE #
+
+clean:
+	make FLASH_SIZE=512 clean
+	make FLASH_SIZE=256 clean
+	make FLASH_SIZE=128 clean
+	-$(RM) -r obj src
+
+else
 
 programdfu:	$(OUTPUT).hex
+	$(DFU) $(DFU_CHIP) dump > /dev/null
 	$(DFU) $(DFU_CHIP) erase
 	$(DFU) $(DFU_CHIP) flash --suppress-bootloader-mem $<
 	# dfu-programmer is returning 1 for reset commands even when they work
@@ -176,7 +205,8 @@ programhf:	$(OUTPUT).hfu
 
 clean:
 	-$(RM) $(OBJS) $(DEPS)
-	-$(RM) update_data*
+	-$(RM) -r src/$(FLASH_SIZE)k
 	-$(RM) $(OUTPUT).elf $(OUTPUT).map $(OUTPUT).hex $(OUTPUT).hfu
-	-$(RM) -r ASF ASF_modified
+	-$(RM) -r obj/$(FLASH_SIZE)k/ASF obj/$(FLASH_SIZE)k/ASF_modified
 
+endif

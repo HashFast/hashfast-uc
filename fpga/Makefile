@@ -12,7 +12,7 @@ all: fpga_program.h
 
 fpga_program.h: fpga_Implmnt/sbt/outputs/bitmap/top_bitmap.bin
 	version=`grep 'define DEFAULT_VERSION' src/defaults.h | awk '{print $$3;}'`;	\
-	./make-c --version=$$version $< > $@
+	./make-fpga-program -v=$$version -i $< -o $@
 
 fpga_Implmnt/sbt/outputs/bitmap/top_bitmap.bin: src/defaults.h
 	@echo ERROR: $@ must be rebuilt by hand; exit 1
@@ -24,13 +24,14 @@ install: all
 	cp fpga_program.h ../src
 
 clean:
-	rm -f stdout.log
+	rm -f ./fpga_program.h
 
 veryclean: clean fpga_implement_clean
 
 #
-# toss everything not in the repository in the fpga_Implmnt
-# directory.
+# toss everything not in the fpga_Implmnt directory.
 #
 fpga_implement_clean:
-	rm -f `hg status | grep '^? fpga/fpga_Implmnt' | sed 's/^\? fpga\///g'`
+	rm -f ./stdout.log
+	rm -f ./synlog.tcl
+	rm -rf ./fpga_Implmnt

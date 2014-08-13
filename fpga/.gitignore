@@ -1,0 +1,4 @@
+fpga_Implmnt/*
+fpga_program.h
+stdout.log
+synlog.tcl

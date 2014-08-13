@@ -1,0 +1,141 @@
+#! /usr/bin/env python
+
+# Copyright (c) 2014, HashFast Technologies LLC
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#   1.  Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#   2.  Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#   3.  Neither the name of HashFast Technologies LLC nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Makes fpga_program.h')
+  parser.add_argument('-v', '--version', dest='version', type=int, required=True, help='FPGA program version')
+  parser.add_argument('-i', '--input',   dest='input',   type=str, required=True, help='input filename')
+  parser.add_argument('-o', '--output',  dest='output',  type=str, required=True, help='output filename')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
+
+import time
+
+header = '''/** @file fpga_program.h
+ * @brief FPGA program transmitted over SPI
+ *
+ * FPGA code generator makes this file.
+ * Version %d
+ * Generated on %s
+ *
+ * 1. Use Lattice iCEcube2 to generate bitmap.
+ * 2. Navigate to HashFast uC directory:
+ *      $ ./cd HASHFAST_UC_DIR/fpga
+ * 3. Compile this file (fpga_program.h):
+ *      $ make all
+ * 4. Copy file to uC source:
+ *      $ make install
+ *
+ * This is a compressed version of the actual binary. The compression scheme
+ * exploits the excess 0x0 bytes inherent in an FPGA program. For any instance
+ * of 0x0, it is replaced with a two bytes: 0x0 immediately followed by the 
+ * number of bytes replaced. For instance:
+ * ...
+ * 0xFF,
+ * 0x00,
+ * 0x03,
+ * 0xFF,
+ * ...
+ * Would transmitt ... 0xFF 0x00 0x00 0x00 0xFF ...
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+const static uint8_t fpga_program_version    = (%d | 0x80); //!< 0x80 means version is compressed
+
+const static uint8_t const fpga_program[] = {
+%s
+};
+'''
+
+def main(args):
+  # read bitmap
+  finput   = open(args.input, "r")
+  raw_prog = finput.read()
+  finput.close()
+  # assemble program
+  com_prog = []
+  prev     = 0xff
+  nzero    = 0
+  for x in raw_prog:
+    b = ord(x)
+    if b is 0:
+      nzero += 1
+      if nzero is 0xff:
+        com_prog.append(0)
+        com_prog.append(nzero)
+        nzero = 0
+    else:
+      if prev is 0:
+        com_prog.append(0)
+        com_prog.append(nzero)
+        nzero = 0
+      com_prog.append(b)
+    prev = b
+
+  program = ",\n".join([hex(x) for x in com_prog])
+  version = args.version
+  now = time.ctime()
+  contents = header % (version, now, version, program)
+  # write program
+  foutput = open(args.output, "w")
+  foutput.write(contents)
+  foutput.close()
+
+if __name__ == "__main__":
+  main(args)

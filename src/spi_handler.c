@@ -606,6 +606,53 @@ static inline void delay(volatile int loops) {
 }
 
 /**
+ * Modified spi_write_packet to write a HashFast compressed FPGA program.
+ * @param spi
+ * @param data
+ * @param len
+ * @return
+ */
+status_code_t fpga_spi_write_packet(volatile avr32_spi_t *spi, const uint8_t *data, size_t len) {
+    unsigned int timeout = SPI_TIMEOUT;
+    size_t i=0, j;
+    uint8_t val, amt;
+
+    while(len) {
+        timeout = SPI_TIMEOUT;
+        while (!spi_is_tx_ready(spi)) {
+            if (!timeout--) {
+                return ERR_TIMEOUT;
+            }
+        }
+        /* get val */
+        val = data[i];
+        i++;
+        len--;
+        if (val == 0x00) {
+            /* get the amount of 0x00s to write */
+            amt = data[i];
+            i++;
+            len--;
+            /* write amt of 0x00 */
+            for(j=0; j < amt; j++) {
+                spi_write_single(spi, val);
+                /* make sure SPI is ready */
+                timeout = SPI_TIMEOUT;
+                while (!spi_is_tx_ready(spi)) {
+                    if (!timeout--) {
+                        return ERR_TIMEOUT;
+                    }
+                }
+            }
+        } else {
+            /* write single val */
+            spi_write_single(spi, val);
+        }
+    }
+    return STATUS_OK;
+}
+
+/**
  * FPGA programmer. This is only ever called once at system startup, to program
  * the FPGA. It uses polled I/O, and ties the system up for a while. The FPGA is
  * a OTP thing, but there seems no need to program the thing when the loading of
@@ -644,7 +691,13 @@ bool fpga_programmer(void) {
     delay(10000);
 
     /* send image */
-    spi_write_packet(&AVR32_SPI, fpga_program, sizeof(fpga_program));
+    if (fpga_program_version & 0x80) {
+        /* write compressed program */
+        fpga_spi_write_packet(&AVR32_SPI, fpga_program, sizeof(fpga_program));
+    } else {
+        /* write uncompressed program */
+        spi_write_packet(&AVR32_SPI, fpga_program, sizeof(fpga_program));
+    }
 
     /* send the trailing padding... */
     spi_write_packet(&AVR32_SPI, pad, sizeof(pad));
