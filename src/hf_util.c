@@ -1,11 +1,41 @@
-/*
- * Utilities
+/** @file hf_util.c
+ * @brief Utilities
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "main.h"
 #include "hf_util.h"
 
-
+/**
+ * CRC-8 Table
+ */
 const uint8_t const crc8_table[256] = {
     0x00, 0x07, 0x0e, 0x09, 0x1c, 0x1b, 0x12, 0x15, 0x38, 0x3f, 0x36, 0x31, 0x24, 0x23, 0x2a, 0x2d, 
     0x70, 0x77, 0x7e, 0x79, 0x6c, 0x6b, 0x62, 0x65, 0x48, 0x4f, 0x46, 0x41, 0x54, 0x53, 0x5a, 0x5d, 
@@ -23,8 +53,11 @@ const uint8_t const crc8_table[256] = {
     0x3e, 0x39, 0x30, 0x37, 0x22, 0x25, 0x2c, 0x2b, 0x06, 0x01, 0x08, 0x0f, 0x1a, 0x1d, 0x14, 0x13, 
     0xae, 0xa9, 0xa0, 0xa7, 0xb2, 0xb5, 0xbc, 0xbb, 0x96, 0x91, 0x98, 0x9f, 0x8a, 0x8d, 0x84, 0x83, 
     0xde, 0xd9, 0xd0, 0xd7, 0xc2, 0xc5, 0xcc, 0xcb, 0xe6, 0xe1, 0xe8, 0xef, 0xfa, 0xfd, 0xf4, 0xf3
-    };
+};
 
+/**
+ * CRC-32 Table
+ */
 const uint32_t const crc32_table[256] = {
     (uint32_t)0x00000000, (uint32_t)0x04c11db7, (uint32_t)0x09823b6e, (uint32_t)0x0d4326d9, (uint32_t)0x130476dc, (uint32_t)0x17c56b6b, (uint32_t)0x1a864db2, (uint32_t)0x1e475005, 
     (uint32_t)0x2608edb8, (uint32_t)0x22c9f00f, (uint32_t)0x2f8ad6d6, (uint32_t)0x2b4bcb61, (uint32_t)0x350c9b64, (uint32_t)0x31cd86d3, (uint32_t)0x3c8ea00a, (uint32_t)0x384fbdbd, 
@@ -58,40 +91,46 @@ const uint32_t const crc32_table[256] = {
     (uint32_t)0xe3a1cbc1, (uint32_t)0xe760d676, (uint32_t)0xea23f0af, (uint32_t)0xeee2ed18, (uint32_t)0xf0a5bd1d, (uint32_t)0xf464a0aa, (uint32_t)0xf9278673, (uint32_t)0xfde69bc4, 
     (uint32_t)0x89b8fd09, (uint32_t)0x8d79e0be, (uint32_t)0x803ac667, (uint32_t)0x84fbdbd0, (uint32_t)0x9abc8bd5, (uint32_t)0x9e7d9662, (uint32_t)0x933eb0bb, (uint32_t)0x97ffad0c, 
     (uint32_t)0xafb010b1, (uint32_t)0xab710d06, (uint32_t)0xa6322bdf, (uint32_t)0xa2f33668, (uint32_t)0xbcb4666d, (uint32_t)0xb8757bda, (uint32_t)0xb5365d03, (uint32_t)0xb1f740b4
-    };
+};
 
-
-uint8_t hf_crc8(uint8_t *h)
-    {
+/**
+ * Calculate CRC-8 of hf_packet
+ * @param h
+ * @return CRC-8
+ */
+uint8_t hf_crc8(uint8_t *h) {
     int i;
     uint8_t crc;
 
     h++;                            // Preamble not included
-    for (i=1, crc=0xff; i < 7; i++)
+    for (i = 1, crc = 0xff; i < 7; i++) {
         crc = crc8_table[crc ^ *h++];
-
-    return(crc);
     }
+    return (crc);
+}
 
-uint32_t hf_crc32(unsigned char *p, int len, int plug_in)
-    {
-    uint32_t crc = (uint32_t)0xffffffff, crc_sav;
+/**
+ * Calculate CRC-32 of USB packet
+ * @param p
+ * @param len
+ * @param plug_in
+ * @return CRC-32
+ */
+uint32_t hf_crc32(unsigned char *p, int len, int plug_in) {
+    uint32_t crc = (uint32_t) 0xffffffff, crc_sav;
     uint32_t i;
 
-    while (len--)
-        {
+    while (len--) {
         i = ((crc >> 24) ^ *p++) & 0xff;
         crc = (crc << 8) ^ crc32_table[i];
-        }
+    }
 
     crc_sav = crc;
 
-    if (plug_in)
-        {
-        for (i = 0; i < 4; i++, crc >>= 8)
+    if (plug_in) {
+        for (i = 0; i < 4; i++, crc >>= 8) {
             *p++ = crc & 0xff;
         }
-
-    return(crc_sav);
     }
-
+    return (crc_sav);
+}

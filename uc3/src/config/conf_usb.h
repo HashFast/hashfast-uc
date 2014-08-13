@@ -44,7 +44,6 @@
 #ifndef _CONF_USB_H_
 #define _CONF_USB_H_
 
-#include "compiler.h"
 #include "board.h"
 #include "hf_protocol.h"
 #include "usbctrl.h"

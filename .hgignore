@@ -1,0 +1,11 @@
+#
+syntax: glob
+*.d
+*.o
+*.eep
+*.elf
+*.hex
+*.lss
+*.map
+*.srec
+*~

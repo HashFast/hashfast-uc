@@ -1,15 +1,41 @@
-/* da2s.c */
-
-/*
-    Copyright (c) 2014 HashFast Technologies LLC
-*/
+/** @file da2s.c
+ * @brief Provides a direct to serial interface over USB Control Channel.
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdint.h>
 #include <intc.h>
 #include <udc.h>
 
 #include "da2s.h"
-
+#include "uc3b_peripherals.h"
 
 #define USART_DA2S                         (*GN_UART)
 
@@ -19,17 +45,14 @@
 #define DMA_USART_DA2S_RX      (AVR32_PDCA.channel[DMA_USART_DA2S_RX_CHANNEL])
 #define DMA_USART_DA2S_TX      (AVR32_PDCA.channel[DMA_USART_DA2S_TX_CHANNEL])
 
-/* 230400 is the max baud the ASIC with a 25MHz ref clock can do out of
-   reset */
+/* 230400 is the max baud the ASIC with a 25MHz ref clock can do out of reset */
 #define BAUD_DEFAULT                 230400
 
 #define RX_BUFFER_BYTES                 256
 
 #define TX_BUFFER_BYTES                 256
 
-
 char da2sEnabled = 0;
-
 
 static struct {
     struct {
@@ -43,10 +66,7 @@ static struct {
     } tx;
 } da2s;
 
-
-
 static __attribute__((__interrupt__)) void rxDMA(void) {
-
     DMA_USART_DA2S_RX.marr = (uint32_t) &da2s.rx.buffer[0];
     DMA_USART_DA2S_RX.tcrr = sizeof(da2s.rx.buffer);
 }
@@ -59,8 +79,7 @@ static __attribute__((__interrupt__)) void txDMA(void) {
     else
         count = sizeof(da2s.tx.buffer) - da2s.tx.queuedTail;
     if (count) {
-        DMA_USART_DA2S_TX.marr = (uint32_t)
-                                 &da2s.tx.buffer[da2s.tx.queuedTail];
+        DMA_USART_DA2S_TX.marr = (uint32_t) &da2s.tx.buffer[da2s.tx.queuedTail];
         DMA_USART_DA2S_TX.tcrr = count;
         da2s.tx.queuedTail += count;
         if (da2s.tx.queuedTail >= sizeof(da2s.tx.buffer))
@@ -69,6 +88,9 @@ static __attribute__((__interrupt__)) void txDMA(void) {
         DMA_USART_DA2S_TX.idr = AVR32_PDCA_IDR_RCZ_MASK;
 }
 
+/**
+ * Disable the UART and DMA
+ */
 static void disableUsartAndDma(void) {
     irqflags_t irq;
 
@@ -86,6 +108,11 @@ static void disableUsartAndDma(void) {
     USART_DA2S.cr = AVR32_USART_CR_RSTTX | AVR32_USART_CR_RSTRX;
 }
 
+/**
+ * Enable direct to serial
+ * @param enable
+ * @param baud
+ */
 void da2sEnable(char enable, uint32_t baud) {
     uint32_t div;
 
@@ -96,10 +123,8 @@ void da2sEnable(char enable, uint32_t baud) {
                 baud = BAUD_DEFAULT;
         }
         if (baud) {
-            div = (sysclk_get_pba_hz() + (baud * (16 / 8) / 2)) /
-                  (baud * (16 / 8));
-            USART_DA2S.brgr = ((div >> 3) << AVR32_USART_BRGR_CD) |
-                              ((div & 7) << AVR32_USART_BRGR_FP);
+            div = (sysclk_get_pba_hz() + (baud * (16 / 8) / 2)) / (baud * (16 / 8));
+            USART_DA2S.brgr = ((div >> 3) << AVR32_USART_BRGR_CD) | ((div & 7) << AVR32_USART_BRGR_FP);
         }
         if (!da2sEnabled) {
             da2s.rx.tail = 0;
@@ -107,21 +132,14 @@ void da2sEnable(char enable, uint32_t baud) {
             da2s.tx.queuedTail = 0;
             da2sEnabled = 1;
             USART_DA2S.mr = (AVR32_USART_MR_OVER_X16 <<
-                             AVR32_USART_MR_OVER) |
-                            (AVR32_USART_MR_MSBF_LSBF <<
-                             AVR32_USART_MR_MSBF) |
-                            (AVR32_USART_MR_CHMODE_NORMAL <<
-                             AVR32_USART_MR_CHMODE) |
-                            (AVR32_USART_MR_NBSTOP_1 <<
-                             AVR32_USART_MR_NBSTOP) |
-                            (AVR32_USART_MR_PAR_NONE <<
-                             AVR32_USART_MR_PAR) |
-                            (AVR32_USART_MR_CHRL_8 <<
-                             AVR32_USART_MR_CHRL) |
-                            (AVR32_USART_MR_USCLKS_MCK <<
-                             AVR32_USART_MR_USCLKS) |
-                            (AVR32_USART_MR_MODE_NORMAL <<
-                             AVR32_USART_MR_MODE);
+            AVR32_USART_MR_OVER) | (AVR32_USART_MR_MSBF_LSBF <<
+            AVR32_USART_MR_MSBF) | (AVR32_USART_MR_CHMODE_NORMAL <<
+            AVR32_USART_MR_CHMODE) | (AVR32_USART_MR_NBSTOP_1 <<
+            AVR32_USART_MR_NBSTOP) | (AVR32_USART_MR_PAR_NONE <<
+            AVR32_USART_MR_PAR) | (AVR32_USART_MR_CHRL_8 <<
+            AVR32_USART_MR_CHRL) | (AVR32_USART_MR_USCLKS_MCK <<
+            AVR32_USART_MR_USCLKS) | (AVR32_USART_MR_MODE_NORMAL <<
+            AVR32_USART_MR_MODE);
             INTC_register_interrupt(&rxDMA, AVR32_PDCA_IRQ_2, AVR32_INTC_INT3);
             INTC_register_interrupt(&txDMA, AVR32_PDCA_IRQ_1, AVR32_INTC_INT2);
             DMA_USART_DA2S_TX.mar = (uint32_t) &da2s.tx.buffer[0];
@@ -129,25 +147,30 @@ void da2sEnable(char enable, uint32_t baud) {
             DMA_USART_DA2S_TX.psr = AVR32_PDCA_PID_USART1_TX;
             DMA_USART_DA2S_RX.psr = AVR32_PDCA_PID_USART1_RX;
             DMA_USART_DA2S_TX.mr = AVR32_PDCA_MR_SIZE_BYTE <<
-                                   AVR32_PDCA_MR_SIZE_OFFSET;
+            AVR32_PDCA_MR_SIZE_OFFSET;
             DMA_USART_DA2S_RX.mr = AVR32_PDCA_MR_SIZE_BYTE <<
-                                   AVR32_PDCA_MR_SIZE_OFFSET;
+            AVR32_PDCA_MR_SIZE_OFFSET;
             DMA_USART_DA2S_TX.cr = AVR32_PDCA_CR_TEN_MASK;
             DMA_USART_DA2S_RX.cr = AVR32_PDCA_CR_TEN_MASK;
             DMA_USART_DA2S_RX.ier = AVR32_PDCA_IER_RCZ_MASK;
             USART_DA2S.cr = AVR32_USART_CR_RXEN_MASK |
-                            AVR32_USART_CR_TXEN_MASK;
+            AVR32_USART_CR_TXEN_MASK;
         }
     } else if (da2sEnabled) {
         disableUsartAndDma();
         da2sEnabled = 0;
-        /* if we wanted the capability to switch back to normal mode, we
-           would ask the usb_uart module to reinit here.  but at least for
-           now we'll require a reboot; there's probably no reason to ever
-           switch between modes without a reboot. */
+        /*
+         * if we wanted the capability to switch back to normal mode, we
+         * would ask the usb_uart module to reinit here. But at least for
+         * now we'll require a reboot; there's probably no reason to ever
+         * switch between modes without a reboot.
+         */
     }
 }
 
+/**
+ * Periodic direct to serial task
+ */
 void da2sTask(void) {
     int uartCount;
     int count;
@@ -156,8 +179,7 @@ void da2sTask(void) {
 
     if (da2sEnabled && main_b_cdc_enable) {
         r = DMA_USART_DA2S_RX.mar;
-        uartCount = (int) ((r - (uint32_t) &da2s.rx.buffer[0]) -
-                           (uint32_t) da2s.rx.tail);
+        uartCount = (int) ((r - (uint32_t) &da2s.rx.buffer[0]) - (uint32_t) da2s.rx.tail);
         if (uartCount < 0)
             uartCount += sizeof(da2s.rx.buffer);
         if (uartCount) {
@@ -181,8 +203,7 @@ void da2sTask(void) {
         count = udi_cdc_get_nb_received_data();
         if (count) {
             r = DMA_USART_DA2S_TX.mar;
-            uartCount = (int) ((uint32_t) da2s.tx.head -
-                               (r - (uint32_t) &da2s.tx.buffer[0]));
+            uartCount = (int) ((uint32_t) da2s.tx.head - (r - (uint32_t) &da2s.tx.buffer[0]));
             if (uartCount < 0)
                 uartCount += sizeof(da2s.rx.buffer);
             uartCount = sizeof(da2s.rx.buffer) - 1 - uartCount;
@@ -206,4 +227,3 @@ void da2sTask(void) {
         }
     }
 }
-

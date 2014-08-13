@@ -1,6 +1,34 @@
-//
-// TWI interfaces
-//
+/** @file twi_handler.c
+ * @brief TWI interfaces
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include "main.h"
 #include "hf_loader_p.h"
@@ -8,30 +36,32 @@
 #include "ir3566b.h"
 #include "twi.h"
 
-
 #define TWI_TIME_MAX                       100
 
 #define TWI_MODULE_POLLING_INTERVAL        250
 
-#define TWI_IR_POLLING_INTERVAL            250
-
+#define TWI_IR_POLLING_INTERVAL            1000
 
 #ifndef MAX
 #define MAX(x,y)   ((x) > (y) ? (x) : (y))
 #endif
 
-
+/**
+ * Setup TWI
+ */
 void twi_setup(void) {
-
     gpio_enable_module_pin(TWI_SCL, AVR32_TWI_SCL_0_0_FUNCTION);
     gpio_enable_module_pin(TWI_DATA, AVR32_TWI_SDA_0_0_FUNCTION);
-
     twiInit();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Master operations
-////////////////////////////////////////////////////////////////////////////////
+/*
+ * Master operations
+ */
+
+/**
+ * Setup master TWI
+ */
 void twi_master_setup(void) {
     twiConfigT config;
 
@@ -43,48 +73,45 @@ void twi_master_setup(void) {
 }
 
 #include "ir3566b_program.h"
+
+/**
+ * Program IR3566B parts
+ * @return
+ */
 bool ir3566b_programmer() {
     bool result;
     unsigned int i;
     unsigned int quadrant;
     uint8_t cmd[2];
 
-    // Send image
+    /* send image */
     result = true;
     for (quadrant = 0; quadrant < 4 && result; quadrant++) {
         for (i = 0; i < sizeof(ir3566b_program) && result; i += 3) {
-            /* if die voltage is stored in the user page in mV, replace
-               the default value. */
-            if (ir3566b_program[i] == IR3566B_REG_L1_VBOOT &&
-                all_die_settings[quadrant].voltage >= 250 &&
-                all_die_settings[quadrant].voltage <= 1500) {
+            /*
+             * If die voltage is stored in the user page in mV, replace the
+             * default value.
+             */
+            if (ir3566b_program[i] == IR3566B_REG_L1_VBOOT && all_die_settings[quadrant].voltage >= 250 && all_die_settings[quadrant].voltage <= 1500) {
                 cmd[0] = IR3566B_REG_L1_VBOOT;
                 cmd[1] = (all_die_settings[quadrant].voltage - 245) / 5;
-                result = twi_sync_rw(TWI_BUS_IR3566B,
-                                     TWI_IR3566B_STARTADDR + quadrant,
-                                     cmd, 2, NULL, 0);
+                result = twi_sync_rw(TWI_BUS_IR3566B, TWI_IR3566B_STARTADDR + quadrant, cmd, 2, NULL, 0);
             } else if (ir3566b_program[i] == IR3566B_REG_5D) {
                 cmd[0] = ir3566b_program[i + 0];
                 cmd[1] = ir3566b_program[i + 1];
                 if (quadrant)
                     cmd[1] &= ~IR3566B_REG_5D_VAUX_ENABLE;
-                result = twi_sync_rw(TWI_BUS_IR3566B,
-                                     TWI_IR3566B_STARTADDR + quadrant,
-                                     cmd, 2, NULL, 0);
+                result = twi_sync_rw(TWI_BUS_IR3566B, TWI_IR3566B_STARTADDR + quadrant, cmd, 2, NULL, 0);
             } else
-                result = twi_sync_rw(TWI_BUS_IR3566B,
-                                     TWI_IR3566B_STARTADDR + quadrant,
-                                     &ir3566b_program[i], 2,
-                                     NULL, 0);
+                result = twi_sync_rw(TWI_BUS_IR3566B, TWI_IR3566B_STARTADDR + quadrant, &ir3566b_program[i], 2, NULL, 0);
         }
     }
-
     return result;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Slave operations
-////////////////////////////////////////////////////////////////////////////////
+/*
+ * Slave operations
+ */
 
 #define TS_ADDR     0
 #define TS_DATA     1
@@ -95,12 +122,20 @@ static uint8_t my_twi_address;
 
 static uint8_t slave_rx_addr;
 static uint8_t slave_rx_nb;
+
+/**
+ * Slave rx structure
+ */
 static struct {
     uint8_t b[TWI_BUFSIZE];
     op_settings_t opSettings;
 } slave_rx_data;
 static uint8_t rxBuffer[TWI_BUFSIZE];
 
+/**
+ * Callback for TWI
+ * @param length
+ */
 static void twiCallback(unsigned int length) {
     static union {
         uint8_t b[32];
@@ -122,14 +157,10 @@ static void twiCallback(unsigned int length) {
             txBuffer.b[0] = input_power_good;
             txBuffer.b[1] = 0;
             for (i = 0; i < 4; i++) {
-                txBuffer.b[i * 4 + 2] = moduleStatus[0].inputMillivolts[i] >>
-                                        8;
-                txBuffer.b[i * 4 + 3] = moduleStatus[0].inputMillivolts[i] &
-                                        0xff;
-                txBuffer.b[i * 4 + 4] = moduleStatus[0].outputMillivolts[i] >>
-                                        8;
-                txBuffer.b[i * 4 + 5] = moduleStatus[0].outputMillivolts[i] &
-                                        0xff;
+                txBuffer.b[i * 4 + 2] = moduleStatus[0].inputMillivolts[i] >> 8;
+                txBuffer.b[i * 4 + 3] = moduleStatus[0].inputMillivolts[i] & 0xff;
+                txBuffer.b[i * 4 + 4] = moduleStatus[0].outputMillivolts[i] >> 8;
+                txBuffer.b[i * 4 + 5] = moduleStatus[0].outputMillivolts[i] & 0xff;
             }
             responseLength = 18;
             break;
@@ -139,12 +170,12 @@ static void twiCallback(unsigned int length) {
             txBuffer.b[2] = (FIRMWARE_VERSION >> 8) & 0xff;
             txBuffer.b[3] = FIRMWARE_VERSION & 0xff;
             suffix = (hfLoaderAppSuffixT *) (AVR32_FLASH +
-                                             AVR32_FLASH_SIZE -
-                                             sizeof(hfLoaderAppSuffixT));
-            if (suffix->magic == HF_LOADER_SUFFIX_MAGIC)
+            AVR32_FLASH_SIZE - sizeof(hfLoaderAppSuffixT));
+            if (suffix->magic == HF_LOADER_SUFFIX_MAGIC) {
                 txBuffer.b[4] = 1;
-            else
+            } else {
                 txBuffer.b[4] = 0;
+            }
             txBuffer.b[5] = (suffix->crc >> 24) & 0xff;
             txBuffer.b[6] = (suffix->crc >> 16) & 0xff;
             txBuffer.b[7] = (suffix->crc >> 8) & 0xff;
@@ -181,7 +212,7 @@ static void twiCallback(unsigned int length) {
         case TWICMD_BAD_CORE_BITMAP:
             if (length == 1) {
                 hf_nvram_read_bad_core_bitmap(0, txBuffer.badCores);
-                responseLength = G1_CORES/8;
+                responseLength = G1_CORES / 8;
             }
             break;
         }
@@ -194,6 +225,10 @@ static void twiCallback(unsigned int length) {
     twiSlaveSetTx(txBuffer.b, responseLength);
 }
 
+/**
+ * TWI slave setup
+ * @param addr
+ */
 void twi_slave_setup(uint8_t addr) {
     twiConfigT config;
 
@@ -207,22 +242,42 @@ void twi_slave_setup(uint8_t addr) {
     twiConfig(&config);
 }
 
-
 static twiRequestT *masterRequestHead[TWI_BUS_COUNT];
 
-
+/**
+ * Periodic task
+ */
 static void masterHandler(void) {
     static twiRequestT req;
-    static enum {idleTS = 0,
-                 queryRegulatorTemperature1TS, waitForRegulatorTemperature1TS,
-                 queryRegulatorTemperature2TS, waitForRegulatorTemperature2TS,
-                 queryInputVoltageTS, waitForInputVoltageTS,
-                 queryOutputVoltageTS, waitForOutputVoltageTS,
-                 queryBoardTempsTS, waitForBoardTempsTS,
-                 queryTachsTS, waitForTachsTS,
-                 queryPowerStatusTS, waitForPowerStatusTS} state;
-    static enum {resetBS = 0, idleBS,
-                 retrySubmitBS, busyBS} busState[TWI_BUS_COUNT];
+    static enum {
+        idleTS = 0,
+        queryRegulatorTemperature1TS,
+        waitForRegulatorTemperature1TS,
+        queryRegulatorTemperature2TS,
+        waitForRegulatorTemperature2TS,
+        queryRegulatorFailCodesTS,
+        waitForRegulatorFailCodesTS,
+        queryRegulatorCurrentFaultTS,
+        waitForRegulatorCurrentFaultTS,
+        queryRegulatorPhaseFaultTS,
+        waitForRegulatorPhaseFaultTS,
+        queryInputVoltageTS,
+        waitForInputVoltageTS,
+        queryOutputVoltageTS,
+        waitForOutputVoltageTS,
+        queryBoardTempsTS,
+        waitForBoardTempsTS,
+        queryTachsTS,
+        waitForTachsTS,
+        queryPowerStatusTS,
+        waitForPowerStatusTS
+    } state;
+    static enum {
+        resetBS = 0,
+        idleBS,
+        retrySubmitBS,
+        busyBS
+    } busState[TWI_BUS_COUNT];
     static uint16_t lastModulePoll;
     static uint16_t lastIRPoll;
     static uint16_t watchdog[TWI_BUS_COUNT];
@@ -257,20 +312,10 @@ static void masterHandler(void) {
             case retrySubmitBS:
                 switch (i) {
                 case TWI_BUS_UC:
-                    status = twiMasterWriteRead(
-                                 masterRequestHead[TWI_BUS_UC]->addr,
-                                 masterRequestHead[TWI_BUS_UC]->tx,
-                                 masterRequestHead[TWI_BUS_UC]->txLength,
-                                 masterRequestHead[TWI_BUS_UC]->rx,
-                                 masterRequestHead[TWI_BUS_UC]->rxLength);
+                    status = twiMasterWriteRead(masterRequestHead[TWI_BUS_UC]->addr, masterRequestHead[TWI_BUS_UC]->tx, masterRequestHead[TWI_BUS_UC]->txLength, masterRequestHead[TWI_BUS_UC]->rx, masterRequestHead[TWI_BUS_UC]->rxLength);
                     break;
                 case TWI_BUS_FPGA:
-                    status = spiFpgaTwiMasterWriteRead(
-                                 masterRequestHead[TWI_BUS_FPGA]->addr,
-                                 masterRequestHead[TWI_BUS_FPGA]->tx,
-                                 masterRequestHead[TWI_BUS_FPGA]->txLength,
-                                 masterRequestHead[TWI_BUS_FPGA]->rx,
-                                 masterRequestHead[TWI_BUS_FPGA]->rxLength);
+                    status = spiFpgaTwiMasterWriteRead(masterRequestHead[TWI_BUS_FPGA]->addr, masterRequestHead[TWI_BUS_FPGA]->tx, masterRequestHead[TWI_BUS_FPGA]->txLength, masterRequestHead[TWI_BUS_FPGA]->rx, masterRequestHead[TWI_BUS_FPGA]->rxLength);
                     break;
                 }
                 if (status == TWI_SUCCESS) {
@@ -316,18 +361,22 @@ static void masterHandler(void) {
     switch (state) {
     case idleTS:
         if (boardid == iraBID &&
-            elapsed_since(lastIRPoll) >= TWI_IR_POLLING_INTERVAL) {
+        elapsed_since(lastIRPoll) >= TWI_IR_POLLING_INTERVAL) {
             lastIRPoll = msec_ticker;
             ir = 0;
             state = queryRegulatorTemperature1TS;
         } else if (ucinfo.master && ucinfo.num_slaves &&
-                   elapsed_since(lastModulePoll) >=
-                   TWI_MODULE_POLLING_INTERVAL) {
+        elapsed_since(lastModulePoll) >=
+        TWI_MODULE_POLLING_INTERVAL) {
             lastModulePoll = msec_ticker;
             slave = 0;
             state = queryBoardTempsTS;
         }
         break;
+
+    /*
+     * Regulator Temperature 1
+     */
     case queryRegulatorTemperature1TS:
         txBuffer[0] = IR3566B_REG_TEMP1;
         req.addr = TWI_IR3566B_STARTADDR + ir;
@@ -347,6 +396,10 @@ static void masterHandler(void) {
             state = queryRegulatorTemperature2TS;
         }
         break;
+
+    /*
+     * Regulator Temperature 2
+     */
     case queryRegulatorTemperature2TS:
         txBuffer[0] = IR3566B_REG_TEMP2;
         req.addr = TWI_IR3566B_STARTADDR + ir;
@@ -364,11 +417,140 @@ static void masterHandler(void) {
                     temperature = rxBuffer[0];
             }
             if (temperature >= 0)
-                gwq_update_board_temperature(ir, 0x1000 |
-                                                 (uint16_t) temperature);
+                gwq_update_board_temperature(ir, 0x1000 | (uint16_t) temperature);
+            state = queryRegulatorFailCodesTS;
+        }
+        break;
+
+    /*
+     * Regulator Fail Codes
+     */
+    case queryRegulatorFailCodesTS:
+        txBuffer[0] = IR3566B_REG_L1_FAIL;
+        req.addr = TWI_IR3566B_STARTADDR + ir;
+        req.tx = txBuffer;
+        req.txLength = 1;
+        req.rx = rxBuffer;
+        req.rxLength = 1;
+        twiQueueRequest(TWI_BUS_IR3566B, &req);
+        state = waitForRegulatorFailCodesTS;
+        break;
+    case waitForRegulatorFailCodesTS:
+        if (!req.pending) {
+            if (req.result == TWI_SUCCESS) {
+                if (rxBuffer[0]) {
+                    /* a failure code is pending */
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_OVER_TEMP)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: Over Temp\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_OVER_CURRENT)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: Over Current\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_VCPU_HIGH)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: VCPU High\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_VCPU_LOW)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: VCPU Low\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_V12_LOW)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: V12 Low\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_V3_LOW)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: V3 Low\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_PHASE_FAULT)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: Phase Fault\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_FAIL_SLOW_OVER_CURRENT)
+                        usbctrlDebugStreamPrintf("Regulator %d Fail: Slow Over Current\n", ir);
+                    /* clear sticky codes */
+                    txBuffer[0] = IR3566B_REG_CLEAR_FAIL;
+                    txBuffer[1] = IR3566B_REG_CLEAR_FAIL_L1_STICKY;
+                    req.addr = TWI_IR3566B_STARTADDR + ir;
+                    req.tx = txBuffer;
+                    req.txLength = 2;
+                    req.rx = rxBuffer;
+                    req.rxLength = 0;
+                    twiQueueRequest(TWI_BUS_IR3566B, &req);
+                }
+            }
+            state = queryRegulatorCurrentFaultTS;
+        }
+        break;
+
+    /*
+     * Regulator Current Fault
+     */
+    case queryRegulatorCurrentFaultTS:
+        txBuffer[0] = IR3566B_REG_L1_CURRENT_FAULT;
+        req.addr = TWI_IR3566B_STARTADDR + ir;
+        req.tx = txBuffer;
+        req.txLength = 1;
+        req.rx = rxBuffer;
+        req.rxLength = 1;
+        twiQueueRequest(TWI_BUS_IR3566B, &req);
+        state = waitForRegulatorCurrentFaultTS;
+        break;
+    case waitForRegulatorCurrentFaultTS:
+        if (!req.pending) {
+            if (req.result == TWI_SUCCESS) {
+                if ((rxBuffer[0] & IR3566B_REG_L1_CURRENT_FAULT_MAX) || (rxBuffer[0] & IR3566B_REG_L1_CURRENT_FAULT_MIN)) {
+                    /* a failure code is pending */
+                    if (rxBuffer[0] & IR3566B_REG_L1_CURRENT_FAULT_MIN)
+                        usbctrlDebugStreamPrintf("Regulator %d Current Fault: Min\n", ir);
+                    if (rxBuffer[0] & IR3566B_REG_L1_CURRENT_FAULT_MAX)
+                        usbctrlDebugStreamPrintf("Regulator %d Current Fault: Max\n", ir);
+                    /* read the phase that is generating the fault */
+                    state = queryRegulatorPhaseFaultTS;
+                } else {
+                    /* move to next statistic */
+                    state = queryInputVoltageTS;
+                }
+            }
+        }
+        break;
+
+    /*
+     * Regulator Phase Fault
+     */
+    case queryRegulatorPhaseFaultTS:
+        txBuffer[0] = IR3566B_REG_PHASE_FAULT;
+        req.addr = TWI_IR3566B_STARTADDR + ir;
+        req.tx = txBuffer;
+        req.txLength = 1;
+        req.rx = rxBuffer;
+        req.rxLength = 1;
+        twiQueueRequest(TWI_BUS_IR3566B, &req);
+        state = waitForRegulatorPhaseFaultTS;
+        break;
+    case waitForRegulatorPhaseFaultTS:
+        if (!req.pending) {
+            if (req.result == TWI_SUCCESS) {
+                /* report which phase is generating the fault */
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE1)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 1\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE2)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 2\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE3)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 3\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE4)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 4\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE5)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 5\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE6)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 6\n");
+                if (rxBuffer[0] == IR3566B_REG_PHASE_FAULT_PHASE7)
+                    usbctrlDebugStreamWriteStr("Fault in Phase 7\n");
+                /* clear the phase fault */
+                txBuffer[0] = IR3566B_REG_CLEAR_PHASE_FAULT;
+                txBuffer[1] = IR3566B_REG_CLEAR_PHASE_FAULT_BIT;
+                req.addr = TWI_IR3566B_STARTADDR + ir;
+                req.tx = txBuffer;
+                req.txLength = 2;
+                req.rx = rxBuffer;
+                req.rxLength = 0;
+                twiQueueRequest(TWI_BUS_IR3566B, &req);
+            }
             state = queryInputVoltageTS;
         }
         break;
+
+    /*
+     * Regulator Input Voltage
+     */
     case queryInputVoltageTS:
         txBuffer[0] = IR3566B_REG_VIN_SUPPLY;
         req.addr = TWI_IR3566B_STARTADDR + ir;
@@ -382,12 +564,14 @@ static void masterHandler(void) {
     case waitForInputVoltageTS:
         if (!req.pending) {
             if (req.result == TWI_SUCCESS)
-                moduleStatus[0].inputMillivolts[ir] = (uint16_t)
-                                                      ((uint32_t) rxBuffer[0] *
-                                                       1000 / 8);
+                moduleStatus[0].inputMillivolts[ir] = (uint16_t) ((uint32_t) rxBuffer[0] * 1000 / 8);
             state = queryOutputVoltageTS;
         }
         break;
+
+    /*
+     * Regulator Output Voltage
+     */
     case queryOutputVoltageTS:
         txBuffer[0] = IR3566B_REG_L1_VOUT;
         req.addr = TWI_IR3566B_STARTADDR + ir;
@@ -400,16 +584,20 @@ static void masterHandler(void) {
         break;
     case waitForOutputVoltageTS:
         if (!req.pending) {
-            if (req.result == TWI_SUCCESS)
-                moduleStatus[0].outputMillivolts[ir] = (uint16_t)
-                                                       ((uint32_t) rxBuffer[0] *
-                                                        1000 / 128);
-            if (++ir < 4)
+            if (req.result == TWI_SUCCESS) {
+                moduleStatus[0].outputMillivolts[ir] = (uint16_t) ((uint32_t) rxBuffer[0] * 1000 / 128);
+            }
+            if (++ir < 4) {
                 state = queryRegulatorTemperature1TS;
-            else
+            } else {
                 state = idleTS;
+            }
         }
         break;
+
+    /*
+     * Board Temperatures
+     */
     case queryBoardTempsTS:
         txBuffer[0] = TWICMD_BOARD_TEMPERATURES;
         req.addr = TWI_SLAVE_STARTADDR + slave;
@@ -424,14 +612,17 @@ static void masterHandler(void) {
         if (!req.pending) {
             if (req.result == TWI_SUCCESS) {
                 for (i = 0; i < 4; i++) {
-                    v = ((uint16_t) rxBuffer[i * 2 + 0] << 8) |
-                        rxBuffer[i * 2 + 1];
+                    v = ((uint16_t) rxBuffer[i * 2 + 0] << 8) | rxBuffer[i * 2 + 1];
                     gwq_update_board_temperature((slave + 1) * 4 + i, v);
                 }
             }
             state = queryTachsTS;
         }
         break;
+
+    /*
+     * Board Tachs
+     */
     case queryTachsTS:
         txBuffer[0] = TWICMD_TACHS;
         req.addr = TWI_SLAVE_STARTADDR + slave;
@@ -446,14 +637,17 @@ static void masterHandler(void) {
         if (!req.pending) {
             if (req.result == TWI_SUCCESS) {
                 for (i = 0; i < 4; i++) {
-                    v = ((uint16_t) rxBuffer[i * 2 + 0] << 8) |
-                        rxBuffer[i * 2 + 1];
+                    v = ((uint16_t) rxBuffer[i * 2 + 0] << 8) | rxBuffer[i * 2 + 1];
                     gwq_update_tach((slave + 1) * 4 + i, v);
                 }
             }
             state = queryPowerStatusTS;
         }
         break;
+
+    /*
+     * Board Power Status
+     */
     case queryPowerStatusTS:
         txBuffer[0] = TWICMD_POWER_STATUS;
         req.addr = TWI_SLAVE_STARTADDR + slave;
@@ -468,11 +662,9 @@ static void masterHandler(void) {
         if (!req.pending) {
             if (req.result == TWI_SUCCESS) {
                 for (i = 0; i < 4; i++) {
-                    v = ((uint16_t) rxBuffer[i * 4 + 2] << 8) |
-                        rxBuffer[i * 4 + 3];
+                    v = ((uint16_t) rxBuffer[i * 4 + 2] << 8) | rxBuffer[i * 4 + 3];
                     moduleStatus[slave + 1].inputMillivolts[i] = v;
-                    v = ((uint16_t) rxBuffer[i * 4 + 4] << 8) |
-                        rxBuffer[i * 4 + 5];
+                    v = ((uint16_t) rxBuffer[i * 4 + 4] << 8) | rxBuffer[i * 4 + 5];
                     moduleStatus[slave + 1].outputMillivolts[i] = v;
                 }
             }
@@ -485,26 +677,28 @@ static void masterHandler(void) {
     }
 }
 
-//
-// Main handler
-//
-
 static int tmp1;
 static int addresses[10];
 static int su_pin[10];
 static int sd_pin[10];
 
+/**
+ * Main TWI handler
+ */
 void twi_handler(void) {
     struct ucinfo_t *info = &ucinfo;
 
     if (ts_rx_valid == true) {
-        // I must be a slave, I've received something
+        /* I must be a slave, I've received something */
         switch (slave_rx_addr) {
         case TWICMD_POWERUP:
-            // Turn on a the power supply. If I'm getting this command, I'm a slave and
-            // I must have standby power on, so there must be a power supply on me.
-            // Separating this and TWICMD_STARTUP gets power to ALL slaves, even those
-            // without power supplies, for when the TWICMD_STARTUP happens.
+            /*
+             * Turn on a the power supply. If I'm getting this command, I'm a
+             * slave and I must have standby power on, so there must be a power
+             * supply on me. Separating this and TWICMD_STARTUP gets power to
+             * ALL slaves, even those without power supplies, for when the
+             * TWICMD_STARTUP happens.
+             */
             info->addressing_complete = false;
             gpio_set_pin_high(SPARE_DOWN);
             gpio_set_pin_high(HAVE_USB);
@@ -512,7 +706,7 @@ void twi_handler(void) {
             break;
 
         case TWICMD_STARTUP:
-            // restart addressing cycle
+            /* restart addressing cycle */
             info->addressing_complete = false;
             gpio_set_pin_high(SPARE_DOWN);
             gpio_set_pin_high(HAVE_USB);
@@ -532,17 +726,23 @@ void twi_handler(void) {
             }
 
             if (gpio_pin_is_low(SPARE_UP) && gpio_pin_is_high(SPARE_DOWN)) {
-                // This is MY address! Grab it.
+                /* This is MY address! Grab it. */
                 my_twi_address = slave_rx_data.b[0];
                 my_twi_address_set = true;
                 delay_msec(1);
                 twi_slave_setup(my_twi_address);
                 delay_msec(1);
 
-                if (info->chain_configuration == CC_OPEN_UP)
-                    gpio_set_pin_low(HAVE_USB);             // Send notification back up chain to master, last address done
-                else
-                    gpio_set_pin_low(SPARE_DOWN);           // Propagate down so next module gets next address
+                if (info->chain_configuration == CC_OPEN_UP) {
+                    /*
+                     * Send notification back up chain to master.
+                     * Last address done
+                     */
+                    gpio_set_pin_low(HAVE_USB);
+                } else {
+                    /* Propagate down so next module gets next address. */
+                    gpio_set_pin_low(SPARE_DOWN);
+                }
             }
             break;
 
@@ -554,23 +754,25 @@ void twi_handler(void) {
 
         case TWICMD_FPGA_ASIC_CTL:
             fpga_reg_write(FA_ASIC_CONTROL,
-                           (slave_rx_data.b[0] & F_FORCE_BAUD) ?
-                           (slave_rx_data.b[0] & ~F_FORCE_BAUD) :
-                           ((slave_rx_data.b[0] & ~F_ASIC_BAUD_MASK) |
-                            ucinfo.asic_baud_rate_code));
+                    (slave_rx_data.b[0] & F_FORCE_BAUD) ? (slave_rx_data.b[0] & ~F_FORCE_BAUD) : ((slave_rx_data.b[0] & ~F_ASIC_BAUD_MASK) | ucinfo.asic_baud_rate_code));
             break;
 
         case TWICMD_REBOOT:
             if (slave_rx_nb && slave_rx_data.b[0]) {
-                // tell Atmel DFU loader not to start app ever again
-                // (harmless with custom loader)
+                /*
+                 * Tell Atmel DFU loader not to start app ever again (harmless
+                 * with custom loader).
+                 */
                 flashc_erase_gp_fuse_bit(31, true);
                 flashc_write_gp_fuse_bit(31, true);
-                // tell custom bootloader not to start app on this boot
-                // (harmless with Atmel DFU loader)
+                /*
+                 * Tell custom bootloader not to start app on this boot
+                 * (harmless with Atmel DFU loader).
+                 */
                 AVR32_PM.gplp[1] = 0x73746179;
             }
-            self_reset();                               // Never returns
+            /* never returns */
+            self_reset();
             break;
 
         case TWICMD_FAN_SET:
@@ -578,13 +780,15 @@ void twi_handler(void) {
             break;
 
         case TWICMD_DIE_SETTINGS:
-            if (slave_rx_nb)
+            if (slave_rx_nb) {
                 hf_nvram_write_die_settings(0, &slave_rx_data.opSettings);
+            }
             break;
 
         case TWICMD_BAD_CORE_BITMAP:
-            if (slave_rx_nb)
-                hf_nvram_write_bad_core_bitmap(0, (((uint16_t)slave_rx_data.b[0]) << 8) | slave_rx_data.b[1]);
+            if (slave_rx_nb) {
+                hf_nvram_write_bad_core_bitmap(0, (((uint16_t) slave_rx_data.b[0]) << 8) | slave_rx_data.b[1]);
+            }
             break;
 
         case TWICMD_MIXED_BAUD:
@@ -592,27 +796,26 @@ void twi_handler(void) {
             break;
 
         case TWICMD_VOLTAGE_SET:
-            if (slave_rx_nb >= 3)
-                module_voltage_set(0, slave_rx_data.b[0],
-                                   ((uint16_t) slave_rx_data.b[1] << 8) |
-                                   slave_rx_data.b[2]);
+            if (slave_rx_nb >= 3) {
+                module_voltage_set(0, slave_rx_data.b[0], ((uint16_t) slave_rx_data.b[1] << 8) | slave_rx_data.b[2]);
+            }
             break;
 
         default:
             break;
         }
-
         ts_rx_valid = false;
     }
 
     if (info->master == false) {
         if (info->addressing_complete == false) {
-            // Propagate HAVE_USB back up chain to master during address cycle
+            /* propagate HAVE_USB back up chain to master during address cycle */
             if (info->chain_configuration == CC_MIDDLE) {
-                if (gpio_pin_is_high(USB_DOWN))
+                if (gpio_pin_is_high(USB_DOWN)) {
                     gpio_set_pin_high(HAVE_USB);
-                else
+                } else {
                     gpio_set_pin_low(HAVE_USB);
+                }
             }
         }
     }
@@ -620,6 +823,11 @@ void twi_handler(void) {
     masterHandler();
 }
 
+/**
+ * Queue TWI request
+ * @param bus
+ * @param req
+ */
 void twiQueueRequest(uint8_t bus, twiRequestT *req) {
     twiRequestT *walk;
 
@@ -627,21 +835,31 @@ void twiQueueRequest(uint8_t bus, twiRequestT *req) {
         req->pending = 1;
         req->next = NULL;
         walk = masterRequestHead[bus];
-        while (walk && walk->next)
+        while (walk && walk->next) {
             walk = walk->next;
-        if (walk)
+        }
+        if (walk) {
             walk->next = req;
-        else
+        } else {
             masterRequestHead[bus] = req;
+        }
     } else {
         req->result = TWI_INVALID_ARG;
         req->pending = 0;
     }
 }
 
-bool twi_sync_rw(uint8_t bus, uint8_t dev,
-                 const uint8_t *tx_buffer, unsigned int tx_length,
-                 uint8_t *rx_buffer, unsigned int rx_length) {
+/**
+ * Synchronous TWI read / write
+ * @param bus
+ * @param dev
+ * @param tx_buffer
+ * @param tx_length
+ * @param rx_buffer
+ * @param rx_length
+ * @return
+ */
+bool twi_sync_rw(uint8_t bus, uint8_t dev, const uint8_t *tx_buffer, unsigned int tx_length, uint8_t *rx_buffer, unsigned int rx_length) {
     twiRequestT req;
     int retries;
 
@@ -653,38 +871,40 @@ bool twi_sync_rw(uint8_t bus, uint8_t dev,
         req.rx = rx_buffer;
         req.rxLength = rx_length;
         twiQueueRequest(bus, &req);
-        while (req.pending)
+        while (req.pending) {
             masterHandler();
-        if (dev == TWI_BROADCAST && req.result == TWI_NACK)
+        }
+        if (dev == TWI_BROADCAST && req.result == TWI_NACK) {
             req.result = TWI_SUCCESS;
+        }
     } while (req.result != TWI_SUCCESS && retries++ < 3);
 
     return (req.result == TWI_SUCCESS) ? true : false;
 }
 
-//
-// Send a 1 byte command with a 1 byte value to the broadcast address
-//
-
+/**
+ * Send a 1 byte command with a 1 byte value to the broadcast address
+ * @param cmd
+ * @param value
+ * @return
+ */
 bool twi_broadcast(uint8_t cmd, uint8_t value) {
     uint8_t txBuffer[2];
-
     txBuffer[0] = cmd;
     txBuffer[1] = value;
-
     return twi_sync_rw(TWI_BUS_UC, TWI_BROADCAST, txBuffer, 2, NULL, 0);
 }
 
-//
-// Polled means to get slave data, used at startup time
-//
-
-bool twi_get_slave_data(uint8_t slave_address, uint8_t addr, uint8_t *buf,
-                        int len) {
+/**
+ * Polled means to get slave data, used at startup time
+ * @param slave_address
+ * @param addr
+ * @param buf
+ * @param len
+ * @return
+ */
+bool twi_get_slave_data(uint8_t slave_address, uint8_t addr, uint8_t *buf, int len) {
     uint8_t txBuffer[1];
-
     txBuffer[0] = addr;
-
     return twi_sync_rw(TWI_BUS_UC, slave_address, txBuffer, 1, buf, len);
 }
-

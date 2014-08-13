@@ -1,8 +1,34 @@
-/* usbctrl.c */
-
-/*
-    Copyright (c) 2014 HashFast Technologies LLC
-*/
+/** @file usbctrl.c
+ * @brief USB Control Channel
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -15,8 +41,7 @@
 #include "da2s.h"
 #include "hf_usbctrl.h"
 #include "usbctrl.h"
-
-
+#include "hf_nvram.h"
 
 #define FLAGS_REBOOTING              0x00000001
 #define FLAGS_SETTING_NAME           0x00000002
@@ -27,15 +52,14 @@
 #define FLAGS_ASIC_CTRL              0x00000040
 #define FLAGS_MODE_SET               0x00000080
 
-
-
 #define DBYTES_PER_DIE   6
 #define DBYTES_PER_ASIC 24
 
-
 uint8_t usbctrlDebugBuffer[64];
 
-
+/**
+ * USB Control Channel Debug Monitor
+ */
 static struct {
     struct {
         char buffer[128];
@@ -49,6 +73,9 @@ static struct {
     } rx;
 } debugMonitor;
 
+/**
+ * USB Control Channel Debug Stream
+ */
 static struct {
     unsigned int head;
     unsigned int tail;
@@ -56,6 +83,9 @@ static struct {
     char buffer[1024];
 } debugStream;
 
+/**
+ * USB Control Channel structure
+ */
 static struct {
     uint32_t flags;
     uint16_t timer;
@@ -78,16 +108,21 @@ static struct {
     union {
         uint8_t b[64];
         char name[HF_NAME_SIZE];
-        /* other host tools are already treating serial as if it is a byte
-           array even though the first element is declared as a gawble; we'll
-           continue that treatment through this interface */
+        /*
+         * Other host tools are already treating serial as if it is a byte array
+         * even though the first element is declared as a gawble. We'll continue
+         * that treatment through this interface.
+         */
         serial_number_t serial;
         /* eight bit fields only - no byte order issues */
         fan_settings_t fanSettings;
     } payload;
 } usbctrl;
 
-
+/**
+ * Read a character from the debug monitor.
+ * @return
+ */
 int usbctrlDebugMonitorRead(void) {
     int c;
     unsigned int tail;
@@ -104,6 +139,11 @@ int usbctrlDebugMonitorRead(void) {
     return c;
 }
 
+/**
+ * Write a character to the debug monitor.
+ * @param c
+ * @return
+ */
 int usbctrlDebugMonitorWrite(char c) {
     unsigned int head;
     int result;
@@ -121,7 +161,12 @@ int usbctrlDebugMonitorWrite(char c) {
     return result;
 }
 
-/* queues the complete message or nothing */
+/**
+ * Write a string to the debug stream.
+ * Queues the complete message or nothing.
+ * @param s
+ * @return
+ */
 int usbctrlDebugStreamWriteStr(const char *s) {
     int count;
     int written;
@@ -159,6 +204,12 @@ int usbctrlDebugStreamWriteStr(const char *s) {
     return written;
 }
 
+/**
+ * Write a formatted string to the debug stream.
+ * Queues the complete message or nothing.
+ * @param format
+ * @return
+ */
 int usbctrlDebugStreamPrintf(const char *format, ...) {
     va_list a;
     char str[80];
@@ -178,7 +229,9 @@ int usbctrlDebugStreamPrintf(const char *format, ...) {
     return length;
 }
 
-/* called by isr */
+/**
+ * Called by ISR
+ */
 static void handleSetupEnd(void) {
     unsigned int count;
     int i;
@@ -244,7 +297,9 @@ static void handleSetupEnd(void) {
     }
 }
 
-/* called by isr */
+/**
+ * Called by ISR
+ */
 int usbctrlSetupPacket(void) {
     int handled;
     unsigned int wLength;
@@ -300,7 +355,7 @@ int usbctrlSetupPacket(void) {
                 USB_REQ_DIR_IN) {
                 usbctrl.payload.b[0] = (ucinfo.chain_configuration ==
                                         CC_UNCONFIGURED) ?
-                                       0xff : (ucinfo.master ? 1 : 0);
+                                        0xff : (ucinfo.master ? 1 : 0);
                 usbctrl.payload.b[1] = ucinfo.num_slaves;
                 usbctrl.payload.b[2] = ucinfo.chain_configuration;
                 usbctrl.payload.b[3] = ucinfo.board_initialized ? 1 : 0;
@@ -549,7 +604,7 @@ int usbctrlSetupPacket(void) {
                 }
             }
             break;
-        /**
+        /*
          * Core Overview
          */
         case HF_USBCTRL_CORE_OVERVIEW:
@@ -703,7 +758,7 @@ int usbctrlSetupPacket(void) {
                 handled = 1;
             }
             break;
-        /**
+        /*
          * DEBUG CONTROL
          */
         case HF_USBCTRL_DEBUG_BUFFER:  /* fixed buffer output */
@@ -746,12 +801,13 @@ int usbctrlSetupPacket(void) {
                 }
                 debugStream.tail = tail;
                 if (udd_g_ctrlreq.payload_size == 0) {
-                    /* I think I should be able to send a zero byte
-                       response to the control request (although I'm
-                       not certain, the USB spec might forbid it - I
-                       haven't checked).  Anyway, it isn't working and
-                       it isn't worth taking the time to determine why
-                       so I'm putting in this workaround. */
+                    /* TODO
+                     * I should be able to send a zero byte response to the
+                     * control request (although I'm not certain, the USB spec
+                     * might forbid it - I haven't checked).  Anyway, it isn't
+                     * working and it isn't worth taking the time to determine
+                     * why so I'm putting in this workaround.
+                     */
                     usbctrl.payload.b[0] = '\0';
                     udd_g_ctrlreq.payload_size = 1;
                 }
@@ -786,24 +842,26 @@ int usbctrlSetupPacket(void) {
                 }
                 debugMonitor.tx.tail = tail;
                 if (udd_g_ctrlreq.payload_size == 0) {
-                    /* I think I should be able to send a zero byte
-                       response to the control request (although I'm
-                       not certain, the USB spec might forbid it - I
-                       haven't checked).  Anyway, it isn't working and
-                       it isn't worth taking the time to determine why
-                       so I'm putting in this workaround. */
+                    /* TODO
+                     * I should be able to send a zero byte response to the
+                     * control request (although I'm not certain, the USB spec
+                     * might forbid it - I haven't checked).  Anyway, it isn't
+                     * working and it isn't worth taking the time to determine
+                     * why so I'm putting in this workaround.
+                     */
                     usbctrl.payload.b[0] = '\0';
                     udd_g_ctrlreq.payload_size = 1;
                 }
                 handled = 1;
             } else {
                 if (udd_g_ctrlreq.req.wLength) {
-                    /* XXX should setup buffer to receive data into, to
-                       allow multiple bytes in one transaction.  but
-                       that will require figuring out how ASF wants to
-                       notify us when the buffer has been filled.  for
-                       now one byte per setup is enough, it's just for
-                       keyboard input. */
+                    /* TODO
+                     * Should setup buffer to receive data into, to allow
+                     * multiple bytes in one transaction. But that will require
+                     * figuring out how ASF wants to notify us when the buffer
+                     * has been filled. For now one byte per setup is enough,
+                     * it's just for keyboard input.
+                     */
                 } else {
                     head = debugMonitor.rx.head;
                     if (++head >= sizeof(debugMonitor.rx.buffer))
@@ -819,10 +877,12 @@ int usbctrlSetupPacket(void) {
             break;
         }
     }
-
     return handled;
 }
 
+/**
+ * Periodic USB Control Channel task.
+ */
 void usbctrlTask(void) {
     static uint16_t lastTick;
     uint16_t tick;
@@ -843,7 +903,8 @@ void usbctrlTask(void) {
     switch (usbctrl.state) {
     case idleS:
         if (usbctrl.reboot) {
-            usbctrl.timer = 10; /* time for usbctrl ack to host */
+            /* time for usbctrl ack to host */
+            usbctrl.timer = 10;
             usbctrl.reboot = 0;
             usbctrl.state = rebootS;
         } else if (usbctrl.flags & FLAGS_SETTING_NAME) {
@@ -907,15 +968,20 @@ void usbctrlTask(void) {
             }
             if (usbctrl.rebootModule == 0 || usbctrl.rebootModule == 0xff) {
                 if (usbctrl.rebootMode == loaderRB) {
-                    /* tell Atmel DFU loader not to start app ever again
-                       (harmless with custom loader) */
+                    /*
+                     * Tell Atmel DFU loader not to start app ever again
+                     * (harmless with custom loader).
+                     */
                     flashc_erase_gp_fuse_bit(31, true);
                     flashc_write_gp_fuse_bit(31, true);
-                    /* tell custom bootloader not to start app on this boot
-                       (harmless with Atmel DFU loader) */
+                    /*
+                     * Tell custom bootloader not to start app on this boot
+                     * (harmless with Atmel DFU loader).
+                     */
                     AVR32_PM.gplp[1] = 0x73746179;
                 }
-                self_reset(); /* no return */
+                /* no return */
+                self_reset();
             }
             usbctrl.state = idleS;
             irq = cpu_irq_save();
@@ -928,4 +994,3 @@ void usbctrlTask(void) {
         break;
     }
 }
-

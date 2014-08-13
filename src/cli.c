@@ -1,8 +1,34 @@
-/* cli.c */
-
-/*
-    Copyright (c) 2014 HashFast Technologies LLC
-*/
+/** @file cli.c
+ * @brief Command line interface over USB control channel.
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <string.h>
 #include <stdint.h>
@@ -12,7 +38,6 @@
 #include "boardid.h"
 #include "mpu.h"
 #include "cli.h"
-
 
 #ifdef FEATURE_DEBUG_CLI
 
@@ -24,7 +49,6 @@ extern uint32_t __heap_start__[];
 extern uint32_t __heap_end__[];
 extern uint32_t _stack[];
 extern uint32_t _estack[];
-
 
 static int help(int first, int parmCount, uint32_t *parms);
 static int info(int first, int parmCount, uint32_t *parms);
@@ -52,8 +76,14 @@ static int heapCheck(int first, int parmCount, uint32_t *parms);
 static struct {
     int (*in)(void);
     int (*out)(char);
-    enum {resetMS, promptMS, inputMS, parseMS,
-          commandMS, commandContinueMS} state;
+    enum {
+        resetMS,
+        promptMS,
+        inputMS,
+        parseMS,
+        commandMS,
+        commandContinueMS
+    } state;
     struct {
         char rx[72];
         int length;
@@ -93,7 +123,7 @@ static const struct {
     {"mpuenable", mpuEnable},
 #ifdef FEATURE_PROFILE
     {"profile", profileCLI},
-#endif
+#endif /* FEATURE_PROFILE */
     {"stackcheck", stackCheck},
     {"temperature", dumpTemperatures},
     {"uartstats", uart_cli_stats},
@@ -126,7 +156,7 @@ static const char *helpStrings[] = {
     "mpuenable                    enable mpu\n",
 #ifdef FEATURE_PROFILE
     "profile <reset>              show profile stats, optionally reset stats\n",
-#endif
+#endif /* FEATURE_PROFILE */
     "stackcheck                   check how much of stack has been used\n",
     "temperature                  dump temperature data\n",
     "uartstats                    dump uart stats\n",
@@ -141,7 +171,13 @@ static const char parameterError[] = "parameter error\n";
 
 static const char alignmentError[] = "alignment error\n";
 
-
+/**
+ * Display help text
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int help(int first, int parmCount, uint32_t *parms) {
     static int i;
 
@@ -153,6 +189,13 @@ static int help(int first, int parmCount, uint32_t *parms) {
     return (i >= sizeof(helpStrings) / sizeof(helpStrings[0])) ? 1 : 0;
 }
 
+/**
+ * Displays system information
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int info(int first, int parmCount, uint32_t *parms) {
     static int chunk, module;
     serial_number_t serial;
@@ -201,15 +244,7 @@ static int info(int first, int parmCount, uint32_t *parms) {
         break;
     case 3:
         module_serial(module, &serial);
-        if(serial.magic == U_MAGIC &&
-           serial.start_barrier[0] == 'H' &&
-           serial.start_barrier[1] == 'F' &&
-           serial.start_barrier[2] == ':' &&
-           serial.start_barrier[3] == ':' &&
-           serial.stop_barrier[0] == ':' &&
-           serial.stop_barrier[1] == ':' &&
-           serial.stop_barrier[2] == 'F' &&
-           serial.stop_barrier[3] == 'H') {
+        if (serial.magic == U_MAGIC && serial.start_barrier[0] == 'H' && serial.start_barrier[1] == 'F' && serial.start_barrier[2] == ':' && serial.start_barrier[3] == ':' && serial.stop_barrier[0] == ':' && serial.stop_barrier[1] == ':' && serial.stop_barrier[2] == 'F' && serial.stop_barrier[3] == 'H') {
             cliWriteString("  serial number ");
             for (i = 0; i < sizeof(serial.unique_id); i++) {
                 cliWriteByteHex(serial.unique_id[i]);
@@ -230,14 +265,26 @@ static int info(int first, int parmCount, uint32_t *parms) {
     return done;
 }
 
+/**
+ * Program IR parts
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int irf(int first, int parmCount, uint32_t *parms) {
-
     if (!ir3566b_programmer())
         cliWriteString("program failed\n");
-
     return 1;
 }
 
+/**
+ * Dump bytes
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return bytesToGo
+ */
 static int dumpBytes(int first, int parmCount, uint32_t *parms) {
     static uint32_t nextAddr;
     static uint32_t lastCount;
@@ -277,6 +324,13 @@ static int dumpBytes(int first, int parmCount, uint32_t *parms) {
     return bytesToGo ? 0 : 1;
 }
 
+/**
+ * Dump double bytes (16-bit words)
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return chawmpsToGo
+ */
 static int dumpChawmps(int first, int parmCount, uint32_t *parms) {
     static uint32_t nextAddr;
     static uint32_t lastCount;
@@ -321,6 +375,13 @@ static int dumpChawmps(int first, int parmCount, uint32_t *parms) {
     return chawmpsToGo ? 0 : 1;
 }
 
+/**
+ * Dump 32-bit words
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return gawblesToGo
+ */
 static int dumpGawbles(int first, int parmCount, uint32_t *parms) {
     static uint32_t nextAddr;
     static uint32_t lastCount;
@@ -365,6 +426,13 @@ static int dumpGawbles(int first, int parmCount, uint32_t *parms) {
     return gawblesToGo ? 0 : 1;
 }
 
+/**
+ * Dump registers in the FPGA
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int dumpFPGA(int first, int parmCount, uint32_t *parms) {
     static uint8_t addr = 0;
     uint8_t d;
@@ -380,16 +448,28 @@ static int dumpFPGA(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Write register in the FPGA
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int writeFPGA(int first, int parmCount, uint32_t *parms) {
-
     if (parmCount != 2)
         cliWriteString(parameterError);
     else
         fpga_reg_write(parms[0], parms[1]);
-
     return 1;
 }
 
+/**
+ * Turn on/off GPIO pins
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int gpio(int first, int parmCount, uint32_t *parms) {
     uint32_t which;
 
@@ -420,6 +500,13 @@ static int gpio(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Control fans
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int fan(int first, int parmCount, uint32_t *parms) {
     static unsigned int module;
     int i;
@@ -451,6 +538,13 @@ static int fan(int first, int parmCount, uint32_t *parms) {
     return done;
 }
 
+/**
+ * Display board temperatures
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int dumpTemperatures(int first, int parmCount, uint32_t *parms) {
     static unsigned int module;
     static int die;
@@ -488,6 +582,13 @@ static int dumpTemperatures(int first, int parmCount, uint32_t *parms) {
     return (module > ucinfo.num_slaves) ? 1 : 0;
 }
 
+/**
+ * Write a byte
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int writeBytes(int first, int parmCount, uint32_t *parms) {
     volatile uint8_t *ptr;
     unsigned int i;
@@ -503,6 +604,13 @@ static int writeBytes(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Write a double byte (16-bit word)
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int writeChawmps(int first, int parmCount, uint32_t *parms) {
     volatile uint16_t *ptr;
     unsigned int i;
@@ -520,6 +628,13 @@ static int writeChawmps(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Write a 32-bit word
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int writeGawbles(int first, int parmCount, uint32_t *parms) {
     volatile uint32_t *ptr;
     unsigned int i;
@@ -537,6 +652,13 @@ static int writeGawbles(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Show stack size and unused
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int stackCheck(int first, int parmCount, uint32_t *parms) {
     uint32_t i;
     uint32_t *ptr;
@@ -553,6 +675,12 @@ static int stackCheck(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Fill the heap with 0xDEADBEEF
+ * @param first
+ * @param paramCount
+ * @param params
+ */
 void cliHeapFill(void) {
     uint32_t *ptr;
 
@@ -563,13 +691,26 @@ void cliHeapFill(void) {
 }
 
 #ifdef HEAP_CHECK
+
+/**
+ * Initialize the heap by filling it with 0xDEADBEEF
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int heapInit(int first, int parmCount, uint32_t *parms) {
-
     cliHeapFill();
-
     return 1;
 }
 
+/**
+ * Check the heap for 0xDEADBEEF
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int heapCheck(int first, int parmCount, uint32_t *parms) {
     static int chunk;
     uint32_t *ptr;
@@ -594,7 +735,7 @@ static int heapCheck(int first, int parmCount, uint32_t *parms) {
         break;
     case 1:
         for (ptr = __heap_start__; ptr < __heap_end__ && *ptr == 0xdeadbeef;
-             ptr++)
+                ptr++)
             ;
         cliWriteString("heap (");
         cliWriteGawbleHex((uint32_t) __heap_start__);
@@ -608,25 +749,40 @@ static int heapCheck(int first, int parmCount, uint32_t *parms) {
             cliWriteChar('\n');
         }
         /* fall through */
+        /* no break */
     default:
         done = 1;
     }
 
     return done;
 }
-#endif
+#endif /* HEAP_CHECK */
 
+/**
+ * Enable the MPU
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int mpuEnable(int first, int parmCount, uint32_t *parms) {
 
 #ifdef HEAP_CHECK
     mpuSetup(1);
-#else
+#else /* HEAP_CHECK */
     mpuSetup(0);
-#endif
+#endif /* HEAP_CHECK */
 
     return 1;
 }
 
+/**
+ * Send data over I2C
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int i2c(int first, int parmCount, uint32_t *parms) {
     static uint8_t rxData[64];
     static int chunk;
@@ -635,24 +791,21 @@ static int i2c(int first, int parmCount, uint32_t *parms) {
     int done;
 
     done = 0;
-    if (parmCount < 2 || parmCount > sizeof(txData) + 2 ||
-        parms[parmCount - 1] > sizeof(rxData)) {
+    if (parmCount < 2 || parmCount > sizeof(txData) + 2 || parms[parmCount - 1] > sizeof(rxData)) {
         cliWriteString(parameterError);
         done = 1;
     } else if (first) {
         for (i = 0; i < parmCount - 2; i++)
             txData[i] = (uint8_t) parms[i + 1];
-        if (twi_sync_rw(parms[0] >> 8, parms[0] & 0xff,
-                        txData, parmCount - 2,
-                        rxData, parms[parmCount - 1]))
+        if (twi_sync_rw(parms[0] >> 8, parms[0] & 0xff, txData, parmCount - 2, rxData, parms[parmCount - 1]))
             chunk = 0;
         else {
             cliWriteString("i2c op failed\n");
             done = 1;
         }
     } else {
-        for (i = chunk * 16; i < (chunk + 1) * 16 &&
-                             i < parms[parmCount - 1]; i++) {
+        for (i = chunk * 16; i < (chunk + 1) * 16 && i < parms[parmCount - 1];
+                i++) {
             cliWriteByteHex(rxData[i]);
             cliWriteChar(' ');
             if ((i & 0x0f) == 0x07)
@@ -667,9 +820,16 @@ static int i2c(int first, int parmCount, uint32_t *parms) {
     return done;
 }
 
+/**
+ * Set a voltage offset on IR parts
+ * @param first
+ * @param paramCount
+ * @param params
+ * @return success
+ */
 static int voltOffset(int first, int parmCount, uint32_t *parms) {
     static uint8_t rxData[2];
-    uint8_t txData[2] = { 0x26 };
+    uint8_t txData[2] = {0x26};
     unsigned int i;
 
     //reg 26 -7-8 high nyb
@@ -678,9 +838,9 @@ static int voltOffset(int first, int parmCount, uint32_t *parms) {
         if (parms[0] >= 65) {
             cliWriteString("offset out of range! [0-15]\n");
         } else {
-            txData[1] = (uint8_t) parms[0]*16;
+            txData[1] = (uint8_t) parms[0] * 16;
             if (parmCount == 1) {
-                for (i = 0;i <= 3; i++) {
+                for (i = 0; i <= 3; i++) {
                     if (!twi_sync_rw(TWI_BUS_IR3566B, i + TWI_IR3566B_STARTADDR, txData, 2, NULL, 0)) {
                         cliWriteString("i2c op failed\n");
                     }
@@ -710,7 +870,7 @@ static int voltOffset(int first, int parmCount, uint32_t *parms) {
             cliWriteString("Offset ");
             cliWriteNybbleHex(i);
             cliWriteString(": ");
-            cliWriteNybbleHex(rxData[0]/16);
+            cliWriteNybbleHex(rxData[0] / 16);
             cliWriteString("\n");
         }
     }
@@ -718,8 +878,11 @@ static int voltOffset(int first, int parmCount, uint32_t *parms) {
     return 1;
 }
 
+/**
+ * Write character to CLI
+ * @param c
+ */
 void cliWriteChar(char c) {
-
     if (c == '\n')
         cliWriteChar('\r');
     if (cli.output.length < sizeof(cli.output.tx)) {
@@ -728,8 +891,11 @@ void cliWriteChar(char c) {
     }
 }
 
+/**
+ * Write half-byte (4-bit word)
+ * @param d
+ */
 void cliWriteNybbleHex(uint8_t d) {
-
     d &= 0x0f;
     if (d >= 10)
         d += 'a' - 10;
@@ -738,30 +904,45 @@ void cliWriteNybbleHex(uint8_t d) {
     cliWriteChar((char) d);
 }
 
+/**
+ * Write byte
+ * @param d
+ */
 void cliWriteByteHex(uint8_t d) {
-
     cliWriteNybbleHex(d >> 4);
     cliWriteNybbleHex(d & 0x0f);
 }
 
+/**
+ * Write double byte (16-bit word)
+ * @param d
+ */
 void cliWriteChawmpHex(uint16_t d) {
-
     cliWriteByteHex(d >> 8);
     cliWriteByteHex(d & 0xff);
 }
 
+/**
+ * Write 32-bit word
+ * @param d
+ */
 void cliWriteGawbleHex(uint32_t d) {
-
     cliWriteChawmpHex(d >> 16);
     cliWriteChawmpHex(d & 0xffff);
 }
 
+/**
+ * Write string
+ * @param str
+ */
 void cliWriteString(const char *str) {
-
     while (*str)
         cliWriteChar(*str++);
 }
 
+/**
+ * Initialize stack check
+ */
 static void stackCheckInit(void) {
     uint32_t *ptr;
     irqflags_t irq;
@@ -773,8 +954,12 @@ static void stackCheckInit(void) {
     cpu_irq_restore(irq);
 }
 
+/**
+ * Initialize CLI
+ * @param in
+ * @param out
+ */
 void cliInit(int (*in)(void), int (*out)(char)) {
-
     memset(&cli, 0, sizeof(cli));
     cli.state = resetMS;
     cli.in = in;
@@ -782,8 +967,11 @@ void cliInit(int (*in)(void), int (*out)(char)) {
     stackCheckInit();
 }
 
+/**
+ * Flush CLI
+ * @return success
+ */
 int cliFlush(void) {
-
     while (cli.output.sent < cli.output.length) {
         if (cli.out(cli.output.tx[cli.output.sent]) >= 0)
             cli.output.sent++;
@@ -798,9 +986,18 @@ int cliFlush(void) {
     return (cli.output.length == 0) ? 1 : 0;
 }
 
+/**
+ * Periodic CLI task
+ */
 void cliTask(void) {
     int c;
-    enum {beforeCmdPS, inCmdPS, beforeParmPS, inParmPS, errorPS} parseState;
+    enum {
+        beforeCmdPS,
+        inCmdPS,
+        beforeParmPS,
+        inParmPS,
+        errorPS
+    } parseState;
     int cmdStart, cmdLength;
     int i;
 
@@ -814,6 +1011,7 @@ void cliTask(void) {
         case promptMS:
             cliWriteString("* ");
             cli.state = inputMS;
+            /* no break */
         case inputMS:
             c = cli.in();
             if (c >= 0) {
@@ -871,9 +1069,7 @@ void cliTask(void) {
                 case beforeParmPS:
                     if (cli.input.rx[i] == ' ')
                         i++;
-                    else if (cli.input.parmCount <
-                             sizeof(cli.input.parms) /
-                             sizeof(cli.input.parms[0])) {
+                    else if (cli.input.parmCount < sizeof(cli.input.parms) / sizeof(cli.input.parms[0])) {
                         cli.input.parms[cli.input.parmCount] = 0;
                         cli.input.parmCount++;
                         parseState = inParmPS;
@@ -883,21 +1079,15 @@ void cliTask(void) {
                 case inParmPS:
                     if (cli.input.rx[i] == ' ')
                         parseState = beforeParmPS;
-                    else if (cli.input.rx[i] >= '0' &&
-                             cli.input.rx[i] <= '9') {
+                    else if (cli.input.rx[i] >= '0' && cli.input.rx[i] <= '9') {
                         cli.input.parms[cli.input.parmCount - 1] <<= 4;
-                        cli.input.parms[cli.input.parmCount - 1] |=
-                            cli.input.rx[i++] - '0';
-                    } else if (cli.input.rx[i] >= 'a' &&
-                               cli.input.rx[i] <= 'f') {
+                        cli.input.parms[cli.input.parmCount - 1] |= cli.input.rx[i++] - '0';
+                    } else if (cli.input.rx[i] >= 'a' && cli.input.rx[i] <= 'f') {
                         cli.input.parms[cli.input.parmCount - 1] <<= 4;
-                        cli.input.parms[cli.input.parmCount - 1] |=
-                            cli.input.rx[i++] - 'a' + 10;
-                    } else if (cli.input.rx[i] >= 'A' &&
-                               cli.input.rx[i] <= 'F') {
+                        cli.input.parms[cli.input.parmCount - 1] |= cli.input.rx[i++] - 'a' + 10;
+                    } else if (cli.input.rx[i] >= 'A' && cli.input.rx[i] <= 'F') {
                         cli.input.parms[cli.input.parmCount - 1] <<= 4;
-                        cli.input.parms[cli.input.parmCount - 1] |=
-                            cli.input.rx[i++] - 'A' + 10;
+                        cli.input.parms[cli.input.parmCount - 1] |= cli.input.rx[i++] - 'A' + 10;
                     } else
                         parseState = errorPS;
                     break;
@@ -912,12 +1102,10 @@ void cliTask(void) {
                 cliWriteString("parse error\n");
                 cli.input.length = 0;
                 cli.state = promptMS;
-            } else  {
+            } else {
                 cli.command = -1;
                 for (i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
-                    if (cmdLength == strlen(commands[i].cmd) &&
-                        memcmp(&cli.input.rx[cmdStart], commands[i].cmd,
-                               cmdLength) == 0) {
+                    if (cmdLength == strlen(commands[i].cmd) && memcmp(&cli.input.rx[cmdStart], commands[i].cmd, cmdLength) == 0) {
                         cli.command = i;
                         break;
                     }
@@ -933,9 +1121,7 @@ void cliTask(void) {
         case commandMS:
             /* fall through */
         case commandContinueMS:
-            if (commands[cli.command].func((cli.state == commandMS) ? 1 : 0,
-                                           cli.input.parmCount,
-                                           cli.input.parms) == 0)
+            if (commands[cli.command].func((cli.state == commandMS) ? 1 : 0, cli.input.parmCount, cli.input.parms) == 0)
                 cli.state = commandContinueMS;
             else if (cli.state != resetMS) {
                 cli.input.length = 0;

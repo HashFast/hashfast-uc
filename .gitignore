@@ -1,0 +1,15 @@
+*.d
+*.o
+*.eep
+*.elf
+*.hex
+*.lss
+*.map
+*.srec
+*~
+
+doc/*
+
+*.cproject
+*.project
+*.settings*

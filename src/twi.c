@@ -1,8 +1,34 @@
-/* twi.c */
-
-/*
-    Copyright (c) 2013, 2014 HashFast Technologies LLC
-*/
+/** @file twi.c
+ * @brief TWI operations
+ *
+ * @copyright
+ * Copyright (c) 2014, HashFast Technologies LLC
+ * All rights reserved.
+ *
+ * @page License
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *   1.  Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *   2.  Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *   3.  Neither the name of HashFast Technologies LLC nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL HASHFAST TECHNOLOGIES LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdint.h>
 #include <avr32/io.h>
@@ -13,11 +39,17 @@
 #include "main.h"
 #include "twi.h"
 
-
+/**
+ * TWI
+ */
 static struct {
     int modeMaster;
-    volatile enum {masterIdleTS, masterReadingTS, masterWritingTS,
-                   slaveTS} state;
+    volatile enum {
+        masterIdleTS,
+        masterReadingTS,
+        masterWritingTS,
+        slaveTS
+    } state;
     int result;
     struct {
         unsigned int count;
@@ -35,11 +67,11 @@ static struct {
         unsigned int txBufferIndex;
         void (*callback)(unsigned int);
     } slave;
-} twi = {
-    0, masterIdleTS, TWI_SUCCESS, {0, {0}}, {0, 0, 0, 0, 0, 0, 0}
-};
+} twi = {0, masterIdleTS, TWI_SUCCESS, {0, {0}}, {0, 0, 0, 0, 0, 0, 0}};
 
-
+/**
+ * TWI interrupt routine
+ */
 __attribute__((__interrupt__)) static void twiInterrupt(void) {
     uint32_t sr, mask;
 
@@ -52,20 +84,19 @@ __attribute__((__interrupt__)) static void twiInterrupt(void) {
     case masterReadingTS:
         if ((sr & mask) & AVR32_TWI_SR_ARBLST_MASK) {
             AVR32_TWI.idr = AVR32_TWI_IDR_RXRDY_MASK |
-                            AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_TXCOMP_MASK |
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_ARB_LOST;
             twi.state = masterIdleTS;
         } else if ((sr & mask) & AVR32_TWI_SR_NACK_MASK) {
             AVR32_TWI.idr = AVR32_TWI_IDR_RXRDY_MASK |
-                            AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_TXCOMP_MASK |
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_NACK;
             twi.state = masterIdleTS;
-        } else if (((sr & mask) & AVR32_TWI_SR_RXRDY_MASK) &&
-                   twi.master.count) {
+        } else if (((sr & mask) & AVR32_TWI_SR_RXRDY_MASK) && twi.master.count) {
             *twi.master.ptr.rx++ = (uint8_t) AVR32_TWI.rhr;
             twi.master.count--;
             if (twi.master.count == 1)
@@ -74,11 +105,10 @@ __attribute__((__interrupt__)) static void twiInterrupt(void) {
                 AVR32_TWI.idr = AVR32_TWI_IDR_RXRDY_MASK;
                 AVR32_TWI.ier = AVR32_TWI_IER_TXCOMP_MASK;
             }
-        } else if (((sr & mask) & AVR32_TWI_SR_TXCOMP_MASK) &&
-                   twi.master.count == 0) {
+        } else if (((sr & mask) & AVR32_TWI_SR_TXCOMP_MASK) && twi.master.count == 0) {
             AVR32_TWI.idr = AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_SUCCESS;
             twi.state = masterIdleTS;
         }
@@ -86,82 +116,65 @@ __attribute__((__interrupt__)) static void twiInterrupt(void) {
     case masterWritingTS:
         if ((sr & mask) & AVR32_TWI_SR_ARBLST_MASK) {
             AVR32_TWI.idr = AVR32_TWI_IDR_TXRDY_MASK |
-                            AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_TXCOMP_MASK |
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_ARB_LOST;
             twi.state = masterIdleTS;
         } else if ((sr & mask) & AVR32_TWI_SR_NACK_MASK) {
             AVR32_TWI.idr = AVR32_TWI_IDR_TXRDY_MASK |
-                            AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_TXCOMP_MASK |
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_NACK;
             twi.state = masterIdleTS;
-        } else if (((sr & mask) & AVR32_TWI_SR_TXRDY_MASK) &&
-                   twi.master.count) {
+        } else if (((sr & mask) & AVR32_TWI_SR_TXRDY_MASK) && twi.master.count) {
             AVR32_TWI.thr = (uint32_t) *twi.master.ptr.tx++;
             twi.master.count--;
-        } else if (((sr & mask) & AVR32_TWI_SR_TXRDY_MASK) &&
-                   twi.master.count == 0) {
+        } else if (((sr & mask) & AVR32_TWI_SR_TXRDY_MASK) && twi.master.count == 0) {
             AVR32_TWI.cr = AVR32_TWI_CR_STOP_MASK;
             AVR32_TWI.idr = AVR32_TWI_IDR_TXRDY_MASK;
             AVR32_TWI.ier = AVR32_TWI_IER_TXCOMP_MASK;
-        } else if (((sr & mask) & AVR32_TWI_SR_TXCOMP_MASK) &&
-                   twi.master.count == 0) {
+        } else if (((sr & mask) & AVR32_TWI_SR_TXCOMP_MASK) && twi.master.count == 0) {
             AVR32_TWI.idr = AVR32_TWI_IDR_TXCOMP_MASK |
-                            AVR32_TWI_IDR_NACK_MASK |
-                            AVR32_TWI_IDR_ARBLST_MASK;
+            AVR32_TWI_IDR_NACK_MASK |
+            AVR32_TWI_IDR_ARBLST_MASK;
             twi.result = TWI_SUCCESS;
             twi.state = masterIdleTS;
         }
         break;
     case slaveTS:
-        /* It appears to me that Atmel's TWI slave has a serious design
-           flaw.  Consider the following sequence:
-
-           Scenario 1:
-
-             The master is doing a write transaction
-
-             Following the last byte of the transaction, but before the stop
-             bit, the processor reads that last byte from the RHR.
-
-             The processor disables interrupts for a while.
-
-             The transaction finishes, so EOSACC goes true and SLVACC
-             goes false.
-
-             The master starts another write transaction so SLVACC goes true.
-
-             The first byte is sent, so RXRDY goes true.
-
-             The processor reenables interrupts.
-
-             The processor sees SLVACC, RXRDY, and EOSACC all true.
-
-           Scenario 2:
-
-             The master is doing a write transaction
-
-             Prior to the last byte of the transaction arriving, the
-             processor disables interrupts.
-
-             The last byte of the transaction finishes so RXRDY goes true.
-
-             The stop bit is sent so EOSACC goes true and SLVACC goes false.
-
-             The master starts another transaction so SLVACC goes true.
-
-             The processor reenables interrupts.
-
-             The processor sees SLVACC, RXRDY, and EOSACC all true.
-
-           There does not appear to be any way for the processor to
-           differentiate between those two scenarios.  It cannot determine
-           whether the byte in the RHR is the last of the first transaction
-           or the first byte of the second transaction.
-        */
+        /*
+         * It appears to me that Atmel's TWI slave has a serious design flaw.
+         * Consider the following sequence:
+         *
+         * Scenario 1:
+         *    - The master is doing a write transaction.
+         *    - Following the last byte of the transaction, but before the stop
+         *      bit, the processor reads that last byte from the RHR.
+         *    - The processor disables interrupts for a while.
+         *    - The transaction finishes, so EOSACC goes true and SLVACC goes
+         *      false.
+         *    - The master starts another write transaction so SLVACC goes true.
+         *    - The first byte is sent, so RXRDY goes true.
+         *    - The processor re-enables interrupts.
+         *    - The processor sees SLVACC, RXRDY, and EOSACC all true.
+         *
+         * Scenario 2:
+         *    - The master is doing a write transaction.
+         *    - Prior to the last byte of the transaction arriving, the
+         *      processor disables interrupts.
+         *    - The last byte of the transaction finishes so RXRDY goes true.
+         *    - The stop bit is sent so EOSACC goes true and SLVACC goes false.
+         *    - The master starts another transaction so SLVACC goes true.
+         *    - The processor re-enables interrupts.
+         *    - The processor sees SLVACC, RXRDY, and EOSACC all true.
+         *
+         * There does not appear to be any way for the processor to
+         * differentiate between those two scenarios. It cannot determine
+         * whether the byte in the RHR is the last of the first transaction or
+         * the first byte of the second transaction.
+         */
         if (sr & AVR32_TWI_SR_RXRDY_MASK) {
             if (twi.slave.rxBufferIndex < twi.slave.rxBufferSize)
                 twi.slave.rxBuffer[twi.slave.rxBufferIndex++] = AVR32_TWI.rhr;
@@ -191,26 +204,26 @@ __attribute__((__interrupt__)) static void twiInterrupt(void) {
             if (sr & AVR32_TWI_SR_NACK_MASK) {
                 /* done writing */
 #if 0
-                /* Atmel's ASF driver does this, but it may not be correct.
-                   Figure 19-24 of doc32059.pdf (the uc3b* manual), at the
-                   trailing edge of NACK, says "Read RHR" which would seem
-                   to mean that reading the RHR clears the NACK bit, and
-                   that is what the ASF driver does.  That is dangerous.  If
-                   we had interrupts locked out for a while, another TWI
-                   transaction could have started and the master could have
-                   already sent us a byte, which this read would lose.  The
-                   description of the NACK bit in the SR section says "clear
-                   on read", meaning the act of reading SR clears it.
-                   Fortunately that description, "clear on read", appears to
-                   be the accurate one as that's a far more sane design.
-                */
+                /*
+                 * Atmel's ASF driver does this, but it may not be correct.
+                 * Figure 19-24 of doc32059.pdf (the uc3b* manual), at the
+                 * trailing edge of NACK, says "Read RHR" which would seem to
+                 * mean that reading the RHR clears the NACK bit, and that is
+                 * what the ASF driver does. That is dangerous. If we had
+                 * interrupts locked out for a while, another TWI transaction
+                 * could have started and the master could have already sent us
+                 * a byte, which this read would lose. The description of the
+                 * NACK bit in the SR section says "clear on read", meaning the
+                 * act of reading SR clears it. Fortunately that description,
+                 * "clear on read", appears to be the accurate one as that's a
+                 * far more sane design.
+                 */
                 AVR32_TWI.rhr;
 #endif
                 AVR32_TWI.idr = AVR32_TWI_SR_TXRDY_MASK;
             } else {
                 if (twi.slave.txBufferIndex < twi.slave.txBufferLength)
-                    AVR32_TWI.thr =
-                        twi.slave.txBuffer[twi.slave.txBufferIndex++];
+                    AVR32_TWI.thr = twi.slave.txBuffer[twi.slave.txBufferIndex++];
                 else
                     AVR32_TWI.thr = 42; /* dummy fill */
             }
@@ -218,21 +231,24 @@ __attribute__((__interrupt__)) static void twiInterrupt(void) {
         break;
     default:
         /* cannot get here */
-        AVR32_TWI.idr = ~ (uint32_t) 0;
+        AVR32_TWI.idr = ~(uint32_t) 0;
         break;
-    }
-    profileExit(PROFILE_CHANNEL_TWI_ISR);
+    } profileExit(PROFILE_CHANNEL_TWI_ISR);
 }
 
+/**
+ * Initialize TWI
+ */
 void twiInit(void) {
-
     twiReset();
     INTC_register_interrupt(&twiInterrupt, AVR32_TWI_IRQ, AVR32_INTC_INT0);
 }
 
+/**
+ * Reset TWI
+ */
 void twiReset(void) {
-
-    AVR32_TWI.idr = ~ (uint32_t) 0;
+    AVR32_TWI.idr = ~(uint32_t) 0;
     AVR32_TWI.cr = AVR32_TWI_CR_SWRST_MASK;
     AVR32_TWI.rhr;
     AVR32_TWI.sr;
@@ -240,6 +256,10 @@ void twiReset(void) {
     twi.modeMaster = -1;
 }
 
+/**
+ * Configure TWI
+ * @param config
+ */
 void twiConfig(const twiConfigT *config) {
     uint32_t divisor;
     uint8_t prescale;
@@ -247,22 +267,21 @@ void twiConfig(const twiConfigT *config) {
     if (config->master != twi.modeMaster)
         twiReset();
     if (config->freq) {
-        divisor = (sysclk_get_pba_hz() + 2 * config->freq - 1) /
-                  (2 * config->freq);
-        if (divisor > 4)
+        divisor = (sysclk_get_pba_hz() + 2 * config->freq - 1) / (2 * config->freq);
+        if (divisor > 4) {
             divisor -= 4;
-        else
+        } else {
             divisor = 0;
+        }
         prescale = 0;
         while (divisor > 0xff && prescale <= 7) {
             divisor = (divisor + 1) >> 1;
             prescale++;
         }
-        if (divisor <= 0xff && prescale <= 7)
-            AVR32_TWI.cwgr = (divisor << AVR32_TWI_CWGR_CLDIV_OFFSET) |
-                             (divisor << AVR32_TWI_CWGR_CHDIV_OFFSET) |
-                             ((uint32_t) prescale <<
-                              AVR32_TWI_CWGR_CKDIV_OFFSET);
+        if (divisor <= 0xff && prescale <= 7) {
+            AVR32_TWI.cwgr = (divisor << AVR32_TWI_CWGR_CLDIV_OFFSET) | (divisor << AVR32_TWI_CWGR_CHDIV_OFFSET) | ((uint32_t) prescale <<
+            AVR32_TWI_CWGR_CKDIV_OFFSET);
+        }
     }
 
     AVR32_TWI.smr = ((uint32_t) config->address << AVR32_TWI_SMR_SADR_OFFSET);
@@ -283,63 +302,73 @@ void twiConfig(const twiConfigT *config) {
             twi.state = slaveTS;
             AVR32_TWI.cr = AVR32_TWI_CR_SVEN_MASK | AVR32_TWI_CR_MSDIS_MASK;
             AVR32_TWI.ier = AVR32_TWI_IER_SVACC_MASK |
-                            AVR32_TWI_IER_EOSACC_MASK |
-                            AVR32_TWI_IER_RXRDY_MASK;
+            AVR32_TWI_IER_EOSACC_MASK |
+            AVR32_TWI_IER_RXRDY_MASK;
         }
         twi.modeMaster = config->master;
     }
 }
 
+/**
+ * TWI status
+ * @return
+ */
 int twiStatus(void) {
-
-    if (twi.state != masterIdleTS)
+    if (twi.state != masterIdleTS) {
         return TWI_BUSY;
-
+    }
     return twi.result;
 }
 
-int twiMasterWriteRead(uint8_t addr,
-                       const void *txBuffer, unsigned int txLength,
-                       void *rxBuffer, unsigned int rxLength) {
+/**
+ * TWI Master write / read
+ * @param addr
+ * @param txBuffer
+ * @param txLength
+ * @param rxBuffer
+ * @param rxLength
+ * @return
+ */
+int twiMasterWriteRead(uint8_t addr, const void *txBuffer, unsigned int txLength, void *rxBuffer, unsigned int rxLength) {
     uint32_t iadr;
     uint32_t mmr;
     const uint8_t *tx;
 
-    if ((txLength == 0 && rxLength == 0) || !twi.modeMaster)
+    if ((txLength == 0 && rxLength == 0) || !twi.modeMaster) {
         return TWI_INVALID_ARG;
-
-    /* Atmel, like a surprising number of others, created a damaged
-       I2C module.  I don't know why it seems to be so difficult to
-       get right.  I've done one in Verilog before and didn't have
-       any trouble coming up with a clean design that doesn't impose
-       arbitrary restrictions on the types of transactions it can
-       perform.  The Atmel one cannot do a write, repeated start,
-       and read, unless the write is no more than three bytes. */
-    if (rxLength && txLength > 3)
+    }
+    /*
+     * Atmel, like a surprising number of others, created a damaged I2C module.
+     * I don't know why it seems to be so difficult to get right. I've done one
+     * in Verilog before and didn't have any trouble coming up with a clean
+     * design that doesn't impose arbitrary restrictions on the types of
+     * transactions it can perform. The Atmel one cannot do a write, repeated
+     * start, and read, unless the write is no more than three bytes.
+     */
+    if (rxLength && txLength > 3) {
         return TWI_INVALID_ARG;
-
-    /* this function will not be called by any isrs and there's no
-       preemption so no locking is required here */
+    }
+    /*
+     * This function will not be called by any ISRs and there's no preemption
+     * so no locking is required here.
+     */
     if (twi.state != masterIdleTS)
         return TWI_BUSY;
     twi.state = rxLength ? masterReadingTS : masterWritingTS;
 
-/*dbgPrintf("twi: tx %d rx %d\n", (int) txLength, (int) rxLength);*/
+    //dbgPrintf("twi: tx %d rx %d\n", (int) txLength, (int) rxLength);
     mmr = addr << AVR32_TWI_MMR_DADR_OFFSET;
     if (rxLength) {
         mmr |= AVR32_TWI_MMR_MREAD_MASK;
         switch (txLength) {
         case 1:
-            mmr |= AVR32_TWI_MMR_IADRSZ_ONE_BYTE <<
-                   AVR32_TWI_MMR_IADRSZ_OFFSET;
+            mmr |= AVR32_TWI_MMR_IADRSZ_ONE_BYTE << AVR32_TWI_MMR_IADRSZ_OFFSET;
             break;
         case 2:
-            mmr |= AVR32_TWI_MMR_IADRSZ_TWO_BYTES <<
-                   AVR32_TWI_MMR_IADRSZ_OFFSET;
+            mmr |= AVR32_TWI_MMR_IADRSZ_TWO_BYTES << AVR32_TWI_MMR_IADRSZ_OFFSET;
             break;
         case 3:
-            mmr |= AVR32_TWI_MMR_IADRSZ_THREE_BYTES <<
-                   AVR32_TWI_MMR_IADRSZ_OFFSET;
+            mmr |= AVR32_TWI_MMR_IADRSZ_THREE_BYTES << AVR32_TWI_MMR_IADRSZ_OFFSET;
             break;
         }
         iadr = 0;
@@ -357,29 +386,33 @@ int twiMasterWriteRead(uint8_t addr,
     }
     AVR32_TWI.mmr = mmr;
     if (rxLength) {
-        if (rxLength == 1)
+        if (rxLength == 1) {
             AVR32_TWI.cr = AVR32_TWI_CR_START_MASK | AVR32_TWI_CR_STOP_MASK;
-        else
+        } else {
             AVR32_TWI.cr = AVR32_TWI_CR_START_MASK;
+        }
         AVR32_TWI.ier = AVR32_TWI_IER_RXRDY_MASK |
-                        AVR32_TWI_IER_ARBLST_MASK |
-                        AVR32_TWI_IER_NACK_MASK;
-    } else
+        AVR32_TWI_IER_ARBLST_MASK |
+        AVR32_TWI_IER_NACK_MASK;
+    } else {
         AVR32_TWI.ier = AVR32_TWI_IER_TXRDY_MASK |
-                        AVR32_TWI_IER_ARBLST_MASK |
-                        AVR32_TWI_IER_NACK_MASK;
-
+        AVR32_TWI_IER_ARBLST_MASK |
+        AVR32_TWI_IER_NACK_MASK;
+    }
     return TWI_SUCCESS;
 }
 
+/**
+ * TWI Slave tx
+ * @param txBuffer
+ * @param txLength
+ * @return
+ */
 int twiSlaveSetTx(const void *txBuffer, unsigned int txLength) {
-
-    if ((txLength && !txBuffer) || twi.modeMaster)
+    if ((txLength && !txBuffer) || twi.modeMaster) {
         return TWI_INVALID_ARG;
-
+    }
     twi.slave.txBuffer = txBuffer;
     twi.slave.txBufferLength = txLength;
-
     return TWI_SUCCESS;
 }
-
